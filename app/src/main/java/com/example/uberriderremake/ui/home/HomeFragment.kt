@@ -148,7 +148,6 @@ class HomeFragment : Fragment(), OnMapReadyCallback, FirebaseDriverInfoListener 
         val granted = permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
                 permissions[Manifest.permission.ACCESS_COARSE_LOCATION] == true
         if (granted) {
-            // Permission granted, call init() (which will check permission again)
             init()
         } else {
             Toast.makeText(requireContext(), "Location permission is required!", Toast.LENGTH_SHORT).show()
@@ -195,7 +194,7 @@ class HomeFragment : Fragment(), OnMapReadyCallback, FirebaseDriverInfoListener 
                 return // Do not proceed if location is off
             }
 
-            iFirebaseDriverInfoListener = this
+      //      iFirebaseDriverInfoListener = this
 
             onlineRef = FirebaseDatabase.getInstance().getReference().child(".info/connected")
             riderLocationRef = FirebaseDatabase.getInstance().getReference(Common.RIDER_LOCATION_REFERENCE)
@@ -281,87 +280,51 @@ class HomeFragment : Fragment(), OnMapReadyCallback, FirebaseDriverInfoListener 
                     Log.d("DRIVER_DEBUG", "cityName used for query: $cityName")
 
                     // Query
-                    val driver_location_ref = FirebaseDatabase.getInstance()
-                        .getReference(Common.DRIVERS_LOCATION_REFERENCE)
-                        .child(cityName)
-                    val gf = GeoFire(driver_location_ref)
-                    val geoQuery = gf.queryAtLocation(GeoLocation(location.latitude, location.longitude), distance)
-                    geoQuery.removeAllListeners()
-
-                    geoQuery.addGeoQueryEventListener(object: GeoQueryEventListener{
-                        override fun onKeyEntered(
-                            key: String?,
-                            location: GeoLocation?
-                        ) {
-                            if (key != null && location != null) {
-                                Common.driversFound.add(DriverGeoModel(key, location))
-                                Log.d("DRIVER_DEBUG", "Adding driver: $key at ${location.latitude}, ${location.longitude}")
+                    Common.driversFound.clear()
+                    val driversLocationRef = FirebaseDatabase.getInstance().getReference(Common.DRIVERS_LOCATION_REFERENCE)
+                    driversLocationRef.addListenerForSingleValueEvent(object : ValueEventListener {
+                        override fun onDataChange(snapshot: DataSnapshot) {
+                            var pendingQueries = snapshot.childrenCount
+                            if (pendingQueries == 0L) {
+                            //    addDriverMarker()
+                                return
                             }
-
-                        }
-
-                        override fun onKeyExited(key: String?) {
-
-                        }
-
-                        override fun onKeyMoved(
-                            key: String?,
-                            location: GeoLocation?
-                        ) {
-
-                        }
-
-                        @RequiresPermission(allOf = [Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION])
-                        override fun onGeoQueryReady() {
-                            if(distance <= LIMIT_RANGE) {
-                                distance++
-                                loadAvailableDrivers()
+                            for (citySnapshot in snapshot.children) {
+                                val geoFire = GeoFire(citySnapshot.ref)
+                                val geoQuery = geoFire.queryAtLocation(
+                                    GeoLocation(location.latitude, location.longitude),
+                                    15.0 // 15km radius
+                                )
+                                geoQuery.removeAllListeners()
+                                geoQuery.addGeoQueryEventListener(object : GeoQueryEventListener {
+                                    override fun onKeyEntered(key: String?, geoLocation: GeoLocation?) {
+//                                        if (key != null && geoLocation != null) {
+//                                            Common.driversFound.add(DriverGeoModel(key, geoLocation))
+//                                            Log.d("DRIVER_DEBUG", "Adding driver: $key at ${geoLocation.latitude}, ${geoLocation.longitude}")
+//                                        }
+                                    }
+                                    override fun onKeyExited(key: String?) {}
+                                    override fun onKeyMoved(key: String?, geoLocation: GeoLocation?) {}
+                                    override fun onGeoQueryReady() {
+                                        pendingQueries--
+                                        if (pendingQueries == 0L) {
+                                         //   addDriverMarker()
+                                        }
+                                    }
+                                    override fun onGeoQueryError(error: DatabaseError?) {
+                                        Snackbar.make(requireView(), error?.message ?: "GeoQuery error", Snackbar.LENGTH_SHORT).show()
+                                        pendingQueries--
+                                        if (pendingQueries == 0L) {
+                                          //  addDriverMarker()
+                                        }
+                                    }
+                                })
                             }
-                            else {
-                                distance = 0.0
-                                addDriverMarker()
-                            }
                         }
-
-                        override fun onGeoQueryError(error: DatabaseError?) {
-                            Snackbar.make(requireView(),error!!.message, Snackbar.LENGTH_SHORT).show()
-                        }
-
-                    })
-
-                    driver_location_ref.addChildEventListener(object : ChildEventListener{
-                        override fun onChildAdded(snapshot: DataSnapshot, previousChildName: String?) {
-                            //Have new Driver
-                            val geoQueryModel = snapshot.getValue(GeoQueryModel::class.java)
-                            val geoLocation = GeoLocation(geoQueryModel!!.l!![0], geoQueryModel!!.l!![1])
-                            val driverGeoModel = DriverGeoModel(snapshot.key, geoLocation)
-                            val newDriverLocation = Location("")
-                            newDriverLocation.latitude = geoLocation.latitude
-                            newDriverLocation.longitude = geoLocation.longitude
-                            val newDistance = location.distanceTo(newDriverLocation)/1000      // in km
-                            if(newDistance <= LIMIT_RANGE)
-                                findDriverByKey(driverGeoModel)
-
-                        }
-
-                        override fun onChildChanged(snapshot: DataSnapshot, previousChildName: String?) {
-
-                        }
-
-                        override fun onChildRemoved(snapshot: DataSnapshot) {
-
-                        }
-
-                        override fun onChildMoved(snapshot: DataSnapshot, previousChildName: String?) {
-
-                        }
-
                         override fun onCancelled(error: DatabaseError) {
-                            Snackbar.make(requireView(),error.message, Snackbar.LENGTH_SHORT).show()
+                            Snackbar.make(requireView(), error.message, Snackbar.LENGTH_SHORT).show()
                         }
-
                     })
-
 
                 } catch (e: IOException) {
                     Snackbar.make(requireView(),getString(R.string.permission_require), Snackbar.LENGTH_SHORT).show()
@@ -369,25 +332,25 @@ class HomeFragment : Fragment(), OnMapReadyCallback, FirebaseDriverInfoListener 
             }
     }
 
-    private fun addDriverMarker() {
-        Log.d("DRIVER_DEBUG", "driversFound size: ${Common.driversFound.size}")
-        if(Common.driversFound.isNotEmpty()) {
-            Observable.fromIterable(Common.driversFound)
-                .subscribeOn(Schedulers.newThread())
-                .observeOn(AndroidSchedulers.mainThread())
-                .subscribe(
-                    { driverGeoModel: DriverGeoModel? ->
-                        findDriverByKey(driverGeoModel)
-                    },
-                    {
-                        t : Throwable? -> Snackbar.make(requireView(), t!!.message!!, Snackbar.LENGTH_SHORT).show()
-                    }
-                )
-        }
-        else {
-            Snackbar.make(requireView(),getString(R.string.drivers_not_found), Snackbar.LENGTH_SHORT).show()
-        }
-    }
+//    private fun addDriverMarker() {
+//        Log.d("DRIVER_DEBUG", "driversFound size1x: ${Common.driversFound.size}")
+//        if(Common.driversFound.isNotEmpty()) {
+//            Observable.fromIterable(Common.driversFound)
+//                .subscribeOn(Schedulers.newThread())
+//                .observeOn(AndroidSchedulers.mainThread())
+//                .subscribe(
+//                    { driverGeoModel: DriverGeoModel? ->
+//                        findDriverByKey(driverGeoModel)
+//                    },
+//                    {
+//                        t : Throwable? -> Snackbar.make(requireView(), t!!.message!!, Snackbar.LENGTH_SHORT).show()
+//                    }
+//                )
+//        }
+//        else {
+//            Snackbar.make(requireView(),getString(R.string.drivers_not_found), Snackbar.LENGTH_SHORT).show()
+//        }
+//    }
 
 
     private fun findDriverByKey(driverGeoModel: DriverGeoModel?) {
@@ -563,10 +526,11 @@ class HomeFragment : Fragment(), OnMapReadyCallback, FirebaseDriverInfoListener 
         }
 
         override fun onDestroyView() {
+            if (this::geoFire.isInitialized) {
+                geoFire.removeLocation(FirebaseAuth.getInstance().currentUser!!.uid)
+            }
             super.onDestroyView()
             _binding = null
-            geoFire.removeLocation(FirebaseAuth.getInstance().currentUser!!.uid)
-            onlineRef.removeEventListener(onlineValueEventListener)
         }
     }
 
