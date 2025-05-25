@@ -13,6 +13,8 @@ import android.app.AlertDialog
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.location.LocationManager
 import android.provider.Settings
 import android.view.LayoutInflater
@@ -193,8 +195,14 @@ class HomeFragment : Fragment(), OnMapReadyCallback, FirebaseDriverInfoListener 
                 showLocationEnableDialog()
                 return // Do not proceed if location is off
             }
+            iFirebaseFailedListener = object : FirebaseFailedListener {
+                override fun onFirebaseFailed(message: String) {
+                    Snackbar.make(requireView(), message, Snackbar.LENGTH_SHORT).show()
+                }
+            }
 
-      //      iFirebaseDriverInfoListener = this
+
+            //      iFirebaseDriverInfoListener = this
 
             onlineRef = FirebaseDatabase.getInstance().getReference().child(".info/connected")
             riderLocationRef = FirebaseDatabase.getInstance().getReference(Common.RIDER_LOCATION_REFERENCE)
@@ -281,12 +289,12 @@ class HomeFragment : Fragment(), OnMapReadyCallback, FirebaseDriverInfoListener 
 
                     // Query
                     Common.driversFound.clear()
-                    val driversLocationRef = FirebaseDatabase.getInstance().getReference(Common.DRIVERS_LOCATION_REFERENCE)
+                    val driversLocationRef = FirebaseDatabase.getInstance().getReference("DriversLocation")
                     driversLocationRef.addListenerForSingleValueEvent(object : ValueEventListener {
                         override fun onDataChange(snapshot: DataSnapshot) {
                             var pendingQueries = snapshot.childrenCount
                             if (pendingQueries == 0L) {
-                            //    addDriverMarker()
+                                addDriverMarker()
                                 return
                             }
                             for (citySnapshot in snapshot.children) {
@@ -297,25 +305,37 @@ class HomeFragment : Fragment(), OnMapReadyCallback, FirebaseDriverInfoListener 
                                 )
                                 geoQuery.removeAllListeners()
                                 geoQuery.addGeoQueryEventListener(object : GeoQueryEventListener {
-                                    override fun onKeyEntered(key: String?, geoLocation: GeoLocation?) {
+//                                    override fun onKeyEntered(key: String?, geoLocation: GeoLocation?) {
 //                                        if (key != null && geoLocation != null) {
 //                                            Common.driversFound.add(DriverGeoModel(key, geoLocation))
 //                                            Log.d("DRIVER_DEBUG", "Adding driver: $key at ${geoLocation.latitude}, ${geoLocation.longitude}")
 //                                        }
-                                    }
+//                                    }
+override fun onKeyEntered(key: String?, geoLocation: GeoLocation?) {
+    if (key != null && geoLocation != null) {
+        val alreadyExists = Common.driversFound.any { it.key == key }
+        if (!alreadyExists) {
+            Common.driversFound.add(DriverGeoModel(key, geoLocation))
+            Log.d("DRIVER_DEBUG", "Adding driver: $key at ${geoLocation.latitude}, ${geoLocation.longitude}")
+        } else {
+            Log.d("DRIVER_DEBUG", "Driver $key already exists, not adding again.")
+        }
+    }
+}
+
                                     override fun onKeyExited(key: String?) {}
                                     override fun onKeyMoved(key: String?, geoLocation: GeoLocation?) {}
                                     override fun onGeoQueryReady() {
                                         pendingQueries--
                                         if (pendingQueries == 0L) {
-                                         //   addDriverMarker()
+                                            addDriverMarker()
                                         }
                                     }
                                     override fun onGeoQueryError(error: DatabaseError?) {
                                         Snackbar.make(requireView(), error?.message ?: "GeoQuery error", Snackbar.LENGTH_SHORT).show()
                                         pendingQueries--
                                         if (pendingQueries == 0L) {
-                                          //  addDriverMarker()
+                                            addDriverMarker()
                                         }
                                     }
                                 })
@@ -332,25 +352,25 @@ class HomeFragment : Fragment(), OnMapReadyCallback, FirebaseDriverInfoListener 
             }
     }
 
-//    private fun addDriverMarker() {
-//        Log.d("DRIVER_DEBUG", "driversFound size1x: ${Common.driversFound.size}")
-//        if(Common.driversFound.isNotEmpty()) {
-//            Observable.fromIterable(Common.driversFound)
-//                .subscribeOn(Schedulers.newThread())
-//                .observeOn(AndroidSchedulers.mainThread())
-//                .subscribe(
-//                    { driverGeoModel: DriverGeoModel? ->
-//                        findDriverByKey(driverGeoModel)
-//                    },
-//                    {
-//                        t : Throwable? -> Snackbar.make(requireView(), t!!.message!!, Snackbar.LENGTH_SHORT).show()
-//                    }
-//                )
-//        }
-//        else {
-//            Snackbar.make(requireView(),getString(R.string.drivers_not_found), Snackbar.LENGTH_SHORT).show()
-//        }
-//    }
+    private fun addDriverMarker() {
+        Log.d("DRIVER_DEBUG", "driversFound size1x: ${Common.driversFound.size}")
+        if(Common.driversFound.isNotEmpty()) {
+            Observable.fromIterable(Common.driversFound)
+                .subscribeOn(Schedulers.newThread())
+                .observeOn(AndroidSchedulers.mainThread())
+                .subscribe(
+                    { driverGeoModel: DriverGeoModel? ->
+                        findDriverByKey(driverGeoModel)
+                    },
+                    {
+                        t : Throwable? -> Snackbar.make(requireView(), t!!.message!!, Snackbar.LENGTH_SHORT).show()
+                    }
+                )
+        }
+        else {
+            Snackbar.make(requireView(),getString(R.string.drivers_not_found), Snackbar.LENGTH_SHORT).show()
+        }
+    }
 
 
     private fun findDriverByKey(driverGeoModel: DriverGeoModel?) {
@@ -361,31 +381,36 @@ class HomeFragment : Fragment(), OnMapReadyCallback, FirebaseDriverInfoListener 
                 override fun onDataChange(snapshot: DataSnapshot) {
                     if (snapshot.exists()) {
                         val driverInfoModel = snapshot.getValue(DriverInfoModel::class.java)
-                        Common.driverInfoMap[driverGeoModel.key!!] = driverInfoModel!!
-
-                        val driverLatLng = LatLng(
-                            driverGeoModel.geoLocation!!.latitude,
-                            driverGeoModel.geoLocation!!.longitude
-                        )
-
-                        mMap.addMarker(
-                            MarkerOptions()
-                                .position(driverLatLng)
-                                .flat(true)
-                                .title(driverInfoModel.firstName)
-                                .icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_BLUE))
-                        )
-                    } else {
-                        iFirebaseFailedListener.onFirebaseFailed("Driver info not found: ${driverGeoModel.key}")
+                        if (driverInfoModel != null) {
+                            Common.driverInfoMap[driverGeoModel.key!!] = driverInfoModel
+                            // Attach the driver info to the geo model
+                            driverGeoModel.driverInfoModel = driverInfoModel
+                            // Proceed with displaying driver
+                            onDriverInfoLoadSuccess(driverGeoModel)
+                        }
+                        else {
+                            // Data exists but is malformed or incomplete
+                            Log.d("DRIVER_DEBUG", "Driver data for key ${driverGeoModel.key} is null or malformed.")
+                        }
+                    }
+                    else {
+                        // Key not found!
+                        Log.d("DRIVER_DEBUG", "Driver key ${driverGeoModel.key} not found in DriverInfo.")
                     }
                 }
 
                 override fun onCancelled(error: DatabaseError) {
-                    iFirebaseFailedListener.onFirebaseFailed(error.message)
+                    if (::iFirebaseFailedListener.isInitialized) {
+                        iFirebaseFailedListener.onFirebaseFailed(error.message ?: "Unknown error")
+                    }
                 }
             })
     }
 
+    fun resizeBitmap(context: Context, drawableRes: Int, width: Int, height: Int): Bitmap {
+        val imageBitmap = BitmapFactory.decodeResource(context.resources, drawableRes)
+        return Bitmap.createScaledBitmap(imageBitmap, width, height, false)
+    }
 
 
     override fun onMapReady(googleMap: GoogleMap) {
@@ -449,9 +474,9 @@ class HomeFragment : Fragment(), OnMapReadyCallback, FirebaseDriverInfoListener 
             }
 
 
-        val customLocation = LatLng(27.4924, 77.6737) // Latitude, Longitude of Mathura
-        mMap.addMarker(MarkerOptions().position(customLocation).title("Marker in Mathura"))
-        mMap.moveCamera(CameraUpdateFactory.newLatLngZoom(customLocation, 15f)) // 15f = Zoom level
+//        val customLocation = LatLng(27.4924, 77.6737) // Latitude, Longitude of Mathura
+//        mMap.addMarker(MarkerOptions().position(customLocation).title("Marker in Mathura"))
+//        mMap.moveCamera(CameraUpdateFactory.newLatLngZoom(customLocation, 15f)) // 15f = Zoom level
 
       //  loadAvailableDrivers()
 
@@ -462,25 +487,29 @@ class HomeFragment : Fragment(), OnMapReadyCallback, FirebaseDriverInfoListener 
     override fun onDriverInfoLoadSuccess(driverGeoModel: DriverGeoModel?) {
         if (driverGeoModel == null || driverGeoModel.key == null) return
 
-        if (!Common.markerList.containsKey(driverGeoModel.key)) {
+        val latLng = LatLng(driverGeoModel.geoLocation!!.latitude, driverGeoModel.geoLocation!!.longitude)
+
+        if (!Common.markerList.containsKey(driverGeoModel!!.key)) {
             val marker = mMap.addMarker(
                 MarkerOptions()
                     .position(
                         LatLng(
-                            driverGeoModel.geoLocation!!.latitude,
-                            driverGeoModel.geoLocation!!.longitude
+                            driverGeoModel!!.geoLocation!!.latitude,
+                            driverGeoModel!!.geoLocation!!.longitude
                         )
                     )
                         .flat(true)
                         .title(
                             Common.buildName(
-                                driverGeoModel.driverInfoModel!!.firstName,
-                                driverGeoModel.driverInfoModel!!.lastName
+                                driverGeoModel.driverInfoModel!!.name,
+                                driverGeoModel.driverInfoModel!!.email
                             )
                         )
-                        .snippet(driverGeoModel.driverInfoModel!!.phoneNumber)
-                        .icon(BitmapDescriptorFactory.fromResource(R.drawable.car))
-                )
+
+                        .snippet(driverGeoModel.driverInfoModel!!.phone)
+                    .icon(BitmapDescriptorFactory.fromBitmap(resizeBitmap(requireContext(), R.drawable.car_display, 80, 80)))
+
+            )
             marker?.let {
                 Common.markerList[driverGeoModel.key!!] = it
             }
@@ -488,27 +517,33 @@ class HomeFragment : Fragment(), OnMapReadyCallback, FirebaseDriverInfoListener 
             if (!TextUtils.isEmpty(cityName)) {
                 val driverLocation = FirebaseDatabase.getInstance()
                     .getReference(Common.DRIVERS_LOCATION_REFERENCE)
-                    .child(cityName)
                     .child(driverGeoModel.key!!)
-                driverLocation.addValueEventListener(object : ValueEventListener {
-                    override fun onDataChange(snapshot: DataSnapshot) {
-                        if (snapshot.hasChildren()) {
-                            if (Common.markerList.get(driverGeoModel.key!!) != null) {
-                                val marker = Common.markerList.get(driverGeoModel.key!!)
-                                marker!!.remove()      // Remove marker from Map
-                                Common.markerList.remove(driverGeoModel.key!!)        // Remove marker information
-                                driverLocation.removeEventListener(this)
-                            }
 
+                val valueEventListener = object : ValueEventListener {
+                    override fun onDataChange(snapshot: DataSnapshot) {
+                        Log.d("DRIVER_DEBUG", "Querying users/${driverGeoModel.key}")
+                        Log.d("DRIVER_DEBUG", "Snapshot exists: ${snapshot.exists()}")
+                        Log.d("DRIVER_DEBUG", "Snapshot value: ${snapshot.value}")
+                        // If driver location is removed from the database
+                        if (!snapshot.exists()) {
+                            // Remove marker from the map if it exists
+                            Common.markerList[driverGeoModel.key!!]?.let { marker ->
+                                marker.remove()
+                                Common.markerList.remove(driverGeoModel.key!!)
+                            }
+                            // Remove this listener
+                            driverLocation.removeEventListener(this)
                         }
                     }
 
                     override fun onCancelled(error: DatabaseError) {
-                        Snackbar.make(requireView(), error.message, Snackbar.LENGTH_SHORT).show()
+                        // Optional: handle error
                     }
+                }
 
-                })
+                driverLocation.addValueEventListener(valueEventListener)
             }
+
         }
     }
 
