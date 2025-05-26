@@ -1,6 +1,6 @@
 package com.example.uberriderremake.Remote
 
-import android.database.Observable
+import io.reactivex.Observable
 import retrofit2.http.GET
 import retrofit2.http.Query
 
@@ -14,5 +14,5 @@ interface IGoogleAPI {
         @Query("origin") from: String?,
         @Query("destination") to: String?,
         @Query("key") key: String
-    ): Observable<String>?
+    ): Observable<String>
 }

@@ -96,6 +96,22 @@ dependencies {
     implementation ("com.squareup.retrofit2:converter-scalars:2.6.1")
     implementation ("com.squareup.retrofit2:converter-gson:2.6.1")
 
+    // RxJava
+    implementation ("io.reactivex.rxjava2:rxjava:2.2.21")
+
+// RxAndroid (for AndroidSchedulers.mainThread())
+    implementation ("io.reactivex.rxjava2:rxandroid:2.1.1")
+
+// Retrofit with RxJava adapter
+    implementation ("com.squareup.retrofit2:adapter-rxjava2:2.9.0")
+
+    // RxJava 3
+    implementation ("io.reactivex.rxjava3:rxjava:3.1.5")
+    implementation ("io.reactivex.rxjava3:rxandroid:3.0.2")
+    implementation ("com.squareup.retrofit2:adapter-rxjava3:2.9.0")
+
+
+
 
 
 }

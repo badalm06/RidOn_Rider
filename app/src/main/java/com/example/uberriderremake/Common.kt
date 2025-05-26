@@ -10,6 +10,7 @@ import android.graphics.BitmapFactory
 import android.graphics.Color
 import android.os.Build
 import androidx.core.app.NotificationCompat
+import com.example.uberriderremake.Model.AnimationModel
 import com.example.uberriderremake.Model.DriverGeoModel
 import com.example.uberriderremake.Model.DriverInfoModel
 import com.example.uberriderremake.login.User_rider
@@ -68,6 +69,7 @@ object Common {
     }
 
 
+    val driverSubscribe: MutableMap<String, AnimationModel> = HashMap<String, AnimationModel>()
     val NOTI_TITLE: String = "title"
     val NOTI_BODY: String = "body"
     val TOKEN_REFERENCE: String = "Token"
@@ -79,8 +81,8 @@ object Common {
     val markerList: MutableMap<String, Marker> = HashMap<String, Marker>()
     internal val driverInfoMap = HashMap<String, DriverInfoModel>()
 
-    fun decodePoly(encoded: String): ArrayList<Any?> {
-        val poly = ArrayList<Any?>()
+    fun decodePoly(encoded: String): ArrayList<LatLng?> {
+        val poly = ArrayList<LatLng?>()
         var index=0
         var len=encoded.length
         var lat=0
@@ -115,7 +117,7 @@ object Common {
             )
             poly.add(p)
         }
-        return poly;
+        return poly
     }
 
     fun getBearing(begin: LatLng, end: LatLng): Float {

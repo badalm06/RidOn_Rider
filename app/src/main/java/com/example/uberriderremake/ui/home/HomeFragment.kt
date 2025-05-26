@@ -1,6 +1,7 @@
 package com.example.uberriderremake.ui.home
 
 import android.Manifest
+import android.animation.ValueAnimator
 import android.content.res.Resources
 import android.location.Address
 import android.location.Geocoder
@@ -16,10 +17,12 @@ import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.location.LocationManager
+import android.os.Handler
 import android.provider.Settings
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.view.animation.LinearInterpolator
 import android.widget.RelativeLayout
 import android.widget.TextView
 import android.widget.Toast
@@ -31,10 +34,13 @@ import androidx.lifecycle.ViewModelProvider
 import com.example.uberriderremake.Callback.FirebaseDriverInfoListener
 import com.example.uberriderremake.Callback.FirebaseFailedListener
 import com.example.uberriderremake.Common
+import com.example.uberriderremake.Model.AnimationModel
 import com.example.uberriderremake.Model.DriverGeoModel
 import com.example.uberriderremake.Model.DriverInfoModel
 import com.example.uberriderremake.Model.GeoQueryModel
 import com.example.uberriderremake.R
+import com.example.uberriderremake.Remote.IGoogleAPI
+import com.example.uberriderremake.Remote.RetrofitClient
 import com.example.uberriderremake.databinding.FragmentHomeBinding
 import com.firebase.geofire.GeoFire
 import com.firebase.geofire.GeoLocation
@@ -53,6 +59,7 @@ import com.google.android.gms.maps.SupportMapFragment
 import com.google.android.gms.maps.model.BitmapDescriptorFactory
 import com.google.android.gms.maps.model.LatLng
 import com.google.android.gms.maps.model.MapStyleOptions
+import com.google.android.gms.maps.model.Marker
 import com.google.android.gms.maps.model.MarkerOptions
 import com.google.android.material.snackbar.Snackbar
 import com.google.firebase.auth.FirebaseAuth
@@ -62,6 +69,7 @@ import com.google.firebase.database.DatabaseError
 import com.google.firebase.database.DatabaseReference
 import com.google.firebase.database.FirebaseDatabase
 import com.google.firebase.database.ValueEventListener
+import com.google.gson.JsonArray
 import com.karumi.dexter.Dexter
 import com.karumi.dexter.PermissionToken
 import com.karumi.dexter.listener.PermissionDeniedResponse
@@ -71,9 +79,15 @@ import com.karumi.dexter.listener.single.PermissionListener
 import io.reactivex.Observable
 import io.reactivex.Scheduler
 import io.reactivex.android.schedulers.AndroidSchedulers
+import io.reactivex.disposables.CompositeDisposable
 import io.reactivex.schedulers.Schedulers
+import kotlinx.coroutines.Runnable
+import org.json.JSONArray
+import org.json.JSONObject
+import retrofit2.create
 import java.io.IOException
 import java.util.Locale
+import kotlin.math.ln
 
 class HomeFragment : Fragment(), OnMapReadyCallback, FirebaseDriverInfoListener {
 
@@ -109,6 +123,26 @@ class HomeFragment : Fragment(), OnMapReadyCallback, FirebaseDriverInfoListener 
     lateinit var iFirebaseFailedListener: FirebaseFailedListener
 
     var cityName = ""
+
+    val compositeDisposable = CompositeDisposable()
+    lateinit var iGoogleAPI: IGoogleAPI
+
+    // Moving marker
+    var polylineList: java.util.ArrayList<LatLng?>? = null
+    var handler: Handler? = null
+    var index: Int = 0
+    var next: Int = 0
+    var v: Float = 0.0f
+    var lat: Double = 0.0
+    var lng: Double = 0.0
+    var start: LatLng? = null
+    var end: LatLng? = null
+
+
+    override fun onStop() {
+        compositeDisposable.clear()
+        super.onStop()
+    }
 
 
 
@@ -200,6 +234,9 @@ class HomeFragment : Fragment(), OnMapReadyCallback, FirebaseDriverInfoListener 
                     Snackbar.make(requireView(), message, Snackbar.LENGTH_SHORT).show()
                 }
             }
+
+            iGoogleAPI = RetrofitClient.instance!!.create(IGoogleAPI::class.java)
+
 
 
             //      iFirebaseDriverInfoListener = this
@@ -305,23 +342,18 @@ class HomeFragment : Fragment(), OnMapReadyCallback, FirebaseDriverInfoListener 
                                 )
                                 geoQuery.removeAllListeners()
                                 geoQuery.addGeoQueryEventListener(object : GeoQueryEventListener {
-//                                    override fun onKeyEntered(key: String?, geoLocation: GeoLocation?) {
-//                                        if (key != null && geoLocation != null) {
-//                                            Common.driversFound.add(DriverGeoModel(key, geoLocation))
-//                                            Log.d("DRIVER_DEBUG", "Adding driver: $key at ${geoLocation.latitude}, ${geoLocation.longitude}")
-//                                        }
-//                                    }
-override fun onKeyEntered(key: String?, geoLocation: GeoLocation?) {
-    if (key != null && geoLocation != null) {
-        val alreadyExists = Common.driversFound.any { it.key == key }
-        if (!alreadyExists) {
-            Common.driversFound.add(DriverGeoModel(key, geoLocation))
-            Log.d("DRIVER_DEBUG", "Adding driver: $key at ${geoLocation.latitude}, ${geoLocation.longitude}")
-        } else {
-            Log.d("DRIVER_DEBUG", "Driver $key already exists, not adding again.")
-        }
-    }
-}
+
+                                override fun onKeyEntered(key: String?, geoLocation: GeoLocation?) {
+                                    if (key != null && geoLocation != null) {
+                                        val alreadyExists = Common.driversFound.any { it.key == key }
+                                        if (!alreadyExists) {
+                                            Common.driversFound.add(DriverGeoModel(key, geoLocation))
+                                            Log.d("DRIVER_DEBUG", "Adding driver: $key at ${geoLocation.latitude}, ${geoLocation.longitude}")
+                                        } else {
+                                            Log.d("DRIVER_DEBUG", "Driver $key already exists, not adding again.")
+                                        }
+                                    }
+                                }
 
                                     override fun onKeyExited(key: String?) {}
                                     override fun onKeyMoved(key: String?, geoLocation: GeoLocation?) {}
@@ -529,12 +561,44 @@ override fun onKeyEntered(key: String?, geoLocation: GeoLocation?) {
                             // Remove marker from the map if it exists
                             Common.markerList[driverGeoModel.key!!]?.let { marker ->
                                 marker.remove()
-                                Common.markerList.remove(driverGeoModel.key!!)
+                                Common.markerList.remove(driverGeoModel.key!!)          // Remove marker info
+                                Common.driverSubscribe.remove(driverGeoModel.key!!)     // Remove Driver Info
                             }
                             // Remove this listener
                             driverLocation.removeEventListener(this)
                         }
+
+                        else {
+                            if(Common.markerList.get(driverGeoModel!!.key!!) != null) {
+                                val geoQueryModel = snapshot!!.getValue(GeoQueryModel::class.java)
+                                val animationModel = AnimationModel(false, geoQueryModel!!)
+                                if(Common.driverSubscribe.get(driverGeoModel.key) != null){
+                                    val marker = Common.markerList.get(driverGeoModel!!.key!!)
+                                    val oldPosition = Common.driverSubscribe.get(driverGeoModel.key)
+
+                                    val from = StringBuilder()
+                                        .append(oldPosition!!.geoQueryModel!!.l?.get(0))
+                                        .append(",")
+                                        .append(oldPosition!!.geoQueryModel!!.l?.get(1))
+                                        .toString()
+
+                                    val to = StringBuilder()
+                                        .append(animationModel.geoQueryModel!!.l?.get(0))
+                                        .append(",")
+                                        .append(animationModel.geoQueryModel!!.l?.get(1))
+                                        .toString()
+
+                                    moveMarkerAnimation(driverGeoModel.key!!, animationModel, marker, from, to)
+
+                                }
+                                else {
+                                    Common.driverSubscribe.put(driverGeoModel.key!!, animationModel)      // First Location init
+                                }
+
+                            }
+                        }
                     }
+
 
                     override fun onCancelled(error: DatabaseError) {
                         // Optional: handle error
@@ -546,6 +610,87 @@ override fun onKeyEntered(key: String?, geoLocation: GeoLocation?) {
 
         }
     }
+
+    private fun moveMarkerAnimation(
+        key: String,
+        newData: AnimationModel,
+        marker: Marker?,
+        from: String,
+        to: String
+    ) {
+        if(!newData.isRun) {
+            // Request API
+            compositeDisposable.add(iGoogleAPI.getDirections("driving",
+                "less_driving",
+                from, to,
+                getString(R.string.google_api_key))
+                !!.subscribeOn(Schedulers.io())
+                .observeOn(AndroidSchedulers.mainThread())
+                .subscribe({ returnResult ->
+                    Log.d("API_RETURN", returnResult)
+                    try {
+
+                        val jsonObject = JSONObject(returnResult)
+                        val jsonArray = jsonObject.getJSONArray("routes");
+                        for (i in 0 until jsonArray.length()) {
+                            val route = jsonArray.getJSONObject(i)
+                            val poly = route.getJSONObject("overview_polyline")
+                            val polyline = poly.getString("points")
+                            polylineList = Common.decodePoly(polyline)
+                        }
+
+                        // Moving
+                        handler = Handler()
+                        index = -1
+                        next = 1
+
+
+                        val runnable = object: Runnable {
+                            override fun run() {
+                                if(polylineList!!.size > 1) {
+                                    if(index < polylineList!!.size - 2) {
+                                        index++
+                                        next = index+1
+                                        start = polylineList!![index]!!
+                                        end = polylineList!![next]!!
+                                    }
+
+                                    val valueAnimator = ValueAnimator.ofInt(0,1)
+                                    valueAnimator.duration = 3000
+                                    valueAnimator.interpolator = LinearInterpolator()
+                                    valueAnimator.addUpdateListener { value ->
+                                        v = value.animatedFraction
+                                        lat = v*end!!.latitude + (1-v) * start!!.latitude
+                                        lng = v*end!!.longitude + (1-v) * start!!.longitude
+                                        val newPos = LatLng(lat, lng)
+                                        marker!!.position = newPos
+                                        marker!!.setAnchor(0.5f, 0.5f)
+                                        marker!!.rotation = Common.getBearing(start!!, newPos)
+                                    }
+                                    valueAnimator.start()
+                                    if(index < polylineList!!.size - 2)
+                                        handler!!.postDelayed(this, 1500)
+                                    else if (index < polylineList!!.size - 1){
+                                        newData.isRun = false
+                                        Common.driverSubscribe.put(key, newData)    // Update
+                                    }
+
+                                }
+                            }
+                        }
+
+                        handler!!.postDelayed(runnable, 1500)
+
+
+                    } catch (e:java.lang.Exception)
+                    {
+                        Snackbar.make(requireView(), e.message!!, Snackbar.LENGTH_SHORT).show()
+                    }
+                }
+            ))
+        }
+    }
+
 
 
         override fun onResume() {
