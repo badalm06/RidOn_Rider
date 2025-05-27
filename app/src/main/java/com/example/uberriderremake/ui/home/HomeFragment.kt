@@ -127,16 +127,6 @@ class HomeFragment : Fragment(), OnMapReadyCallback, FirebaseDriverInfoListener 
     val compositeDisposable = CompositeDisposable()
     lateinit var iGoogleAPI: IGoogleAPI
 
-    // Moving marker
-    var polylineList: java.util.ArrayList<LatLng?>? = null
-    var handler: Handler? = null
-    var index: Int = 0
-    var next: Int = 0
-    var v: Float = 0.0f
-    var lat: Double = 0.0
-    var lng: Double = 0.0
-    var start: LatLng? = null
-    var end: LatLng? = null
 
 
     override fun onStop() {
@@ -356,7 +346,34 @@ class HomeFragment : Fragment(), OnMapReadyCallback, FirebaseDriverInfoListener 
                                 }
 
                                     override fun onKeyExited(key: String?) {}
-                                    override fun onKeyMoved(key: String?, geoLocation: GeoLocation?) {}
+                                    override fun onKeyMoved(key: String?, geoLocation: GeoLocation?) {
+                                        key?.let { driverKey ->
+                                            geoLocation?.let { location ->
+                                                moveDriverMarker(driverKey, location)
+                                            }
+                                        }
+                                    }
+
+                                    private fun moveDriverMarker(key: String, geoLocation: GeoLocation) {
+                                        val marker = Common.markerList[key] // Access via Common.markerList
+                                        if (marker != null) {
+                                            val startPosition = marker.position // Now resolves correctly
+                                            val endPosition = LatLng(geoLocation.latitude, geoLocation.longitude)
+                                            val valueAnimator = ValueAnimator.ofFloat(0f, 1f)
+                                            valueAnimator.duration = 1000
+                                            valueAnimator.interpolator = LinearInterpolator()
+                                            valueAnimator.addUpdateListener { animation ->
+                                                val v = animation.animatedFraction
+                                                val lng = v * endPosition.longitude + (1 - v) * startPosition.longitude
+                                                val lat = v * endPosition.latitude + (1 - v) * startPosition.latitude
+                                                marker.position = LatLng(lat, lng) // Update marker position
+                                            }
+                                            valueAnimator.start()
+                                        }
+                                    }
+
+
+
                                     override fun onGeoQueryReady() {
                                         pendingQueries--
                                         if (pendingQueries == 0L) {
@@ -417,6 +434,7 @@ class HomeFragment : Fragment(), OnMapReadyCallback, FirebaseDriverInfoListener 
                             Common.driverInfoMap[driverGeoModel.key!!] = driverInfoModel
                             // Attach the driver info to the geo model
                             driverGeoModel.driverInfoModel = driverInfoModel
+
                             // Proceed with displaying driver
                             onDriverInfoLoadSuccess(driverGeoModel)
                         }
@@ -636,41 +654,44 @@ class HomeFragment : Fragment(), OnMapReadyCallback, FirebaseDriverInfoListener 
                             val route = jsonArray.getJSONObject(i)
                             val poly = route.getJSONObject("overview_polyline")
                             val polyline = poly.getString("points")
-                            polylineList = Common.decodePoly(polyline)
+                            //polylineList = Common.decodePoly(polyline)
+                            newData.polylineList = Common.decodePoly(polyline)
                         }
 
                         // Moving
-                        handler = Handler()
-                        index = -1
-                        next = 1
+//                        handler = Handler()
+//                        index = -1
+//                        next = 1
+                        newData.index = -1
+                        newData.next = 1
 
 
                         val runnable = object: Runnable {
                             override fun run() {
-                                if(polylineList!!.size > 1) {
-                                    if(index < polylineList!!.size - 2) {
-                                        index++
-                                        next = index+1
-                                        start = polylineList!![index]!!
-                                        end = polylineList!![next]!!
+                                if(newData.polylineList != null &&  newData.polylineList!!.size > 1) {
+                                    if(newData.index < newData.polylineList!!.size - 2) {
+                                        newData.index++
+                                        newData.next = newData.index+1
+                                        newData.start = newData.polylineList!![newData.index]!!
+                                        newData.end = newData.polylineList!![newData.next]!!
                                     }
 
                                     val valueAnimator = ValueAnimator.ofInt(0,1)
                                     valueAnimator.duration = 3000
                                     valueAnimator.interpolator = LinearInterpolator()
                                     valueAnimator.addUpdateListener { value ->
-                                        v = value.animatedFraction
-                                        lat = v*end!!.latitude + (1-v) * start!!.latitude
-                                        lng = v*end!!.longitude + (1-v) * start!!.longitude
-                                        val newPos = LatLng(lat, lng)
+                                        newData.v = value.animatedFraction
+                                        newData.lat = newData.v*newData.end!!.latitude + (1-newData.v) * newData.start!!.latitude
+                                        newData.lng = newData.v*newData.end!!.longitude + (1-newData.v) * newData.start!!.longitude
+                                        val newPos = LatLng(newData.lat, newData.lng)
                                         marker!!.position = newPos
                                         marker!!.setAnchor(0.5f, 0.5f)
-                                        marker!!.rotation = Common.getBearing(start!!, newPos)
+                                        marker!!.rotation = Common.getBearing(newData.start!!, newPos)
                                     }
                                     valueAnimator.start()
-                                    if(index < polylineList!!.size - 2)
-                                        handler!!.postDelayed(this, 1500)
-                                    else if (index < polylineList!!.size - 1){
+                                    if(newData.index < newData.polylineList!!.size - 2)
+                                        newData.handler!!.postDelayed(this, 1500)
+                                    else if (newData.index < newData.polylineList!!.size - 1){
                                         newData.isRun = false
                                         Common.driverSubscribe.put(key, newData)    // Update
                                     }
@@ -679,7 +700,7 @@ class HomeFragment : Fragment(), OnMapReadyCallback, FirebaseDriverInfoListener 
                             }
                         }
 
-                        handler!!.postDelayed(runnable, 1500)
+                        newData.handler!!.postDelayed(runnable, 1500)
 
 
                     } catch (e:java.lang.Exception)

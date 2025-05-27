@@ -78,7 +78,7 @@ object Common {
     val DRIVERS_LOCATION_REFERENCE: String = "users"
     val driversFound: MutableSet<DriverGeoModel> = mutableSetOf()
     val DRIVER_INFO_REFERENCE: String = "users"
-    val markerList: MutableMap<String, Marker> = HashMap<String, Marker>()
+    val markerList: MutableMap<String, Marker?> = HashMap<String, Marker?>()
     internal val driverInfoMap = HashMap<String, DriverInfoModel>()
 
     fun decodePoly(encoded: String): ArrayList<LatLng?> {
