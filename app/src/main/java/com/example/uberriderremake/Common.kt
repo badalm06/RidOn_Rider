@@ -9,6 +9,7 @@ import android.content.Intent
 import android.graphics.BitmapFactory
 import android.graphics.Color
 import android.os.Build
+import android.widget.TextView
 import androidx.core.app.NotificationCompat
 import com.example.uberriderremake.Model.AnimationModel
 import com.example.uberriderremake.Model.DriverGeoModel
@@ -17,6 +18,7 @@ import com.example.uberriderremake.login.User_rider
 import com.google.android.gms.maps.model.LatLng
 import com.google.android.gms.maps.model.Marker
 import com.google.android.gms.maps.model.MarkerOptions
+import java.util.Calendar
 import java.util.HashMap
 import kotlin.text.isNullOrEmpty
 
@@ -65,7 +67,7 @@ object Common {
     }
 
     fun buildName(firstName: String?, lastName: String?): String? {
-        return java.lang.StringBuilder(firstName).append(" ").append(lastName).toString()
+        return java.lang.StringBuilder(firstName!!).append(" ").append(lastName).toString()
     }
 
 
@@ -135,7 +137,27 @@ object Common {
         return (-1).toFloat()
     }
 
+    fun setWelcomeMessage(txtWelcome: TextView) {
+        val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
+        if (hour >= 1 && hour <= 12)
+            txtWelcome.setText(java.lang.StringBuilder("Good Morning"))
+        else if (hour > 12 && hour <= 17)
+            txtWelcome.setText(java.lang.StringBuilder("Good Afternoon"))
+        else
+            txtWelcome.setText(java.lang.StringBuilder("Good Evening"))
+    }
 
+    fun formatDuration(duration:String): CharSequence? {
+        if(duration.contains("mins"))
+            return duration.substring(0, duration.length-1)
+        else
+            return duration
+    }
+
+    fun formatAddress(startAddress:String): CharSequence? {
+        val firstIndexComma = startAddress.indexOf(",")
+        return startAddress.substring(0, firstIndexComma)
+    }
 
 
 }

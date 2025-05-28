@@ -37,15 +37,18 @@ import com.example.uberriderremake.Common
 import com.example.uberriderremake.Model.AnimationModel
 import com.example.uberriderremake.Model.DriverGeoModel
 import com.example.uberriderremake.Model.DriverInfoModel
+import com.example.uberriderremake.Model.EventBus.SelectedPlaceEvent
 import com.example.uberriderremake.Model.GeoQueryModel
 import com.example.uberriderremake.R
 import com.example.uberriderremake.Remote.IGoogleAPI
 import com.example.uberriderremake.Remote.RetrofitClient
+import com.example.uberriderremake.RequestDriverActivity
 import com.example.uberriderremake.databinding.FragmentHomeBinding
 import com.firebase.geofire.GeoFire
 import com.firebase.geofire.GeoLocation
 import com.firebase.geofire.GeoQuery
 import com.firebase.geofire.GeoQueryEventListener
+import com.google.android.gms.common.api.Status
 import com.google.android.gms.location.FusedLocationProviderClient
 import com.google.android.gms.location.LocationCallback
 import com.google.android.gms.location.LocationRequest
@@ -61,6 +64,10 @@ import com.google.android.gms.maps.model.LatLng
 import com.google.android.gms.maps.model.MapStyleOptions
 import com.google.android.gms.maps.model.Marker
 import com.google.android.gms.maps.model.MarkerOptions
+import com.google.android.libraries.places.api.Places
+import com.google.android.libraries.places.api.model.Place
+import com.google.android.libraries.places.widget.AutocompleteSupportFragment
+import com.google.android.libraries.places.widget.listener.PlaceSelectionListener
 import com.google.android.material.snackbar.Snackbar
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.database.ChildEventListener
@@ -76,16 +83,19 @@ import com.karumi.dexter.listener.PermissionDeniedResponse
 import com.karumi.dexter.listener.PermissionGrantedResponse
 import com.karumi.dexter.listener.PermissionRequest
 import com.karumi.dexter.listener.single.PermissionListener
+import com.sothree.slidinguppanel.SlidingUpPanelLayout
 import io.reactivex.Observable
 import io.reactivex.Scheduler
 import io.reactivex.android.schedulers.AndroidSchedulers
 import io.reactivex.disposables.CompositeDisposable
 import io.reactivex.schedulers.Schedulers
 import kotlinx.coroutines.Runnable
+import org.greenrobot.eventbus.EventBus
 import org.json.JSONArray
 import org.json.JSONObject
 import retrofit2.create
 import java.io.IOException
+import java.util.Arrays
 import java.util.Locale
 import kotlin.math.ln
 
@@ -94,8 +104,12 @@ class HomeFragment : Fragment(), OnMapReadyCallback, FirebaseDriverInfoListener 
         private var _binding: FragmentHomeBinding? = null
         private val binding get() = _binding!!
         private lateinit var mMap: GoogleMap
-
         private lateinit var mapFragment: SupportMapFragment
+
+
+        private lateinit var slidingUpPanelLayout: SlidingUpPanelLayout
+        private lateinit var txt_welcome: TextView
+         private lateinit var autocompleteSupportFragment: AutocompleteSupportFragment
 
 
         //Location
@@ -193,6 +207,7 @@ class HomeFragment : Fragment(), OnMapReadyCallback, FirebaseDriverInfoListener 
             val root: View = binding.root
 
             init()
+            initViews(root)
 
             mapFragment = childFragmentManager.findFragmentById(R.id.map) as SupportMapFragment
             mapFragment.getMapAsync(this)
@@ -200,7 +215,16 @@ class HomeFragment : Fragment(), OnMapReadyCallback, FirebaseDriverInfoListener 
             return root
         }
 
-        @RequiresPermission(allOf = [Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION])
+    private fun initViews(root: View?) {
+        slidingUpPanelLayout = root!!.findViewById(R.id.activity_main) as SlidingUpPanelLayout
+        txt_welcome = root!!.findViewById(R.id.txt_welcome) as TextView
+
+        Common.setWelcomeMessage(txt_welcome)
+    }
+
+
+
+    @RequiresPermission(allOf = [Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION])
         private fun init() {
 
             if (ActivityCompat.checkSelfPermission(requireContext(), Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED &&
@@ -224,6 +248,36 @@ class HomeFragment : Fragment(), OnMapReadyCallback, FirebaseDriverInfoListener 
                     Snackbar.make(requireView(), message, Snackbar.LENGTH_SHORT).show()
                 }
             }
+
+        Places.initialize(requireContext(), getString(R.string.google_maps_key))
+        autocompleteSupportFragment = childFragmentManager.findFragmentById(R.id.autocomplete_fragment) as AutocompleteSupportFragment
+        autocompleteSupportFragment.setPlaceFields(Arrays.
+        asList(
+            Place.Field.ID,
+            Place.Field.ADDRESS,
+            Place.Field.LAT_LNG,
+            Place.Field.NAME))
+        autocompleteSupportFragment.setOnPlaceSelectedListener(object: PlaceSelectionListener {
+            @RequiresPermission(allOf = [Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION])
+            override fun onPlaceSelected(p0: Place) {
+                fusedLocationProviderClient!!
+                    .lastLocation.addOnSuccessListener { location ->
+                        val origin = LatLng(location.latitude, location.longitude)
+                        val destination = LatLng(p0.latLng.latitude, p0.latLng.longitude)
+
+                        startActivity(Intent(requireContext(), RequestDriverActivity::class.java))
+                        EventBus.getDefault().postSticky(SelectedPlaceEvent(origin, destination))
+
+                    }
+
+
+            }
+
+            override fun onError(p0: Status) {
+                Snackbar.make(requireView(), p0.statusMessage!!, Snackbar.LENGTH_SHORT).show()
+            }
+
+        })
 
             iGoogleAPI = RetrofitClient.instance!!.create(IGoogleAPI::class.java)
 
@@ -264,6 +318,8 @@ class HomeFragment : Fragment(), OnMapReadyCallback, FirebaseDriverInfoListener 
                         previousLocation = locationResult.lastLocation
                         currentLocation = locationResult.lastLocation
 
+                        setRestrictPlacesInCountry(locationResult!!.lastLocation)
+
                         firstTime = false
                     }
                     else {
@@ -294,6 +350,20 @@ class HomeFragment : Fragment(), OnMapReadyCallback, FirebaseDriverInfoListener 
             loadAvailableDrivers();
         }
 
+    private fun setRestrictPlacesInCountry(location: Location?) {
+        try {
+            val geoCoder = Geocoder(requireContext(), Locale.getDefault())
+            var addressList = geoCoder.getFromLocation(location!!.latitude, location!!.longitude, 1)
+            if (addressList!!.size > 0) {
+                autocompleteSupportFragment.setCountry(addressList?.get(0)!!.countryCode)
+            }
+        } catch (e: IOException) {
+            e.printStackTrace()
+        }
+    }
+
+
+
     @RequiresPermission(allOf = [Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION])
     private fun loadAvailableDrivers() {
         fusedLocationProviderClient.lastLocation
@@ -310,90 +380,134 @@ class HomeFragment : Fragment(), OnMapReadyCallback, FirebaseDriverInfoListener 
                 var addressList: List<Address> = ArrayList()
                 try {
                     addressList = geocoder.getFromLocation(location.latitude, location.longitude, 1)!!
-                    cityName = addressList[0].locality
+                    if (addressList.size > 0)
+                        cityName = addressList[0].locality
 
                     Log.d("DRIVER_DEBUG", "cityName used for query: $cityName")
 
                     // Query
                     Common.driversFound.clear()
-                    val driversLocationRef = FirebaseDatabase.getInstance().getReference("DriversLocation")
-                    driversLocationRef.addListenerForSingleValueEvent(object : ValueEventListener {
-                        override fun onDataChange(snapshot: DataSnapshot) {
-                            var pendingQueries = snapshot.childrenCount
-                            if (pendingQueries == 0L) {
-                                addDriverMarker()
-                                return
-                            }
-                            for (citySnapshot in snapshot.children) {
-                                val geoFire = GeoFire(citySnapshot.ref)
-                                val geoQuery = geoFire.queryAtLocation(
-                                    GeoLocation(location.latitude, location.longitude),
-                                    15.0 // 15km radius
-                                )
-                                geoQuery.removeAllListeners()
-                                geoQuery.addGeoQueryEventListener(object : GeoQueryEventListener {
-
-                                override fun onKeyEntered(key: String?, geoLocation: GeoLocation?) {
-                                    if (key != null && geoLocation != null) {
-                                        val alreadyExists = Common.driversFound.any { it.key == key }
-                                        if (!alreadyExists) {
-                                            Common.driversFound.add(DriverGeoModel(key, geoLocation))
-                                            Log.d("DRIVER_DEBUG", "Adding driver: $key at ${geoLocation.latitude}, ${geoLocation.longitude}")
-                                        } else {
-                                            Log.d("DRIVER_DEBUG", "Driver $key already exists, not adding again.")
-                                        }
-                                    }
+                    if(!TextUtils.isEmpty(cityName)) {
+                        val driversLocationRef =
+                            FirebaseDatabase.getInstance().getReference("DriversLocation")
+                        driversLocationRef.addListenerForSingleValueEvent(object :
+                            ValueEventListener {
+                            override fun onDataChange(snapshot: DataSnapshot) {
+                                var pendingQueries = snapshot.childrenCount
+                                if (pendingQueries == 0L) {
+                                    addDriverMarker()
+                                    return
                                 }
+                                for (citySnapshot in snapshot.children) {
+                                    val geoFire = GeoFire(citySnapshot.ref)
+                                    val geoQuery = geoFire.queryAtLocation(
+                                        GeoLocation(location.latitude, location.longitude),
+                                        15.0 // 15km radius
+                                    )
+                                    geoQuery.removeAllListeners()
+                                    geoQuery.addGeoQueryEventListener(object :
+                                        GeoQueryEventListener {
 
-                                    override fun onKeyExited(key: String?) {}
-                                    override fun onKeyMoved(key: String?, geoLocation: GeoLocation?) {
-                                        key?.let { driverKey ->
-                                            geoLocation?.let { location ->
-                                                moveDriverMarker(driverKey, location)
+                                        override fun onKeyEntered(
+                                            key: String?,
+                                            geoLocation: GeoLocation?
+                                        ) {
+                                            if (key != null && geoLocation != null) {
+                                                val alreadyExists =
+                                                    Common.driversFound.any { it.key == key }
+                                                if (!alreadyExists) {
+                                                    Common.driversFound.add(
+                                                        DriverGeoModel(
+                                                            key,
+                                                            geoLocation
+                                                        )
+                                                    )
+                                                    Log.d(
+                                                        "DRIVER_DEBUG",
+                                                        "Adding driver: $key at ${geoLocation.latitude}, ${geoLocation.longitude}"
+                                                    )
+                                                } else {
+                                                    Log.d(
+                                                        "DRIVER_DEBUG",
+                                                        "Driver $key already exists, not adding again."
+                                                    )
+                                                }
                                             }
                                         }
-                                    }
 
-                                    private fun moveDriverMarker(key: String, geoLocation: GeoLocation) {
-                                        val marker = Common.markerList[key] // Access via Common.markerList
-                                        if (marker != null) {
-                                            val startPosition = marker.position // Now resolves correctly
-                                            val endPosition = LatLng(geoLocation.latitude, geoLocation.longitude)
-                                            val valueAnimator = ValueAnimator.ofFloat(0f, 1f)
-                                            valueAnimator.duration = 1000
-                                            valueAnimator.interpolator = LinearInterpolator()
-                                            valueAnimator.addUpdateListener { animation ->
-                                                val v = animation.animatedFraction
-                                                val lng = v * endPosition.longitude + (1 - v) * startPosition.longitude
-                                                val lat = v * endPosition.latitude + (1 - v) * startPosition.latitude
-                                                marker.position = LatLng(lat, lng) // Update marker position
+                                        override fun onKeyExited(key: String?) {}
+                                        override fun onKeyMoved(
+                                            key: String?,
+                                            geoLocation: GeoLocation?
+                                        ) {
+                                            key?.let { driverKey ->
+                                                geoLocation?.let { location ->
+                                                    moveDriverMarker(driverKey, location)
+                                                }
                                             }
-                                            valueAnimator.start()
                                         }
-                                    }
+
+                                        private fun moveDriverMarker(
+                                            key: String,
+                                            geoLocation: GeoLocation
+                                        ) {
+                                            val marker =
+                                                Common.markerList[key] // Access via Common.markerList
+                                            if (marker != null) {
+                                                val startPosition =
+                                                    marker.position // Now resolves correctly
+                                                val endPosition = LatLng(
+                                                    geoLocation.latitude,
+                                                    geoLocation.longitude
+                                                )
+                                                val valueAnimator = ValueAnimator.ofFloat(0f, 1f)
+                                                valueAnimator.duration = 1000
+                                                valueAnimator.interpolator = LinearInterpolator()
+                                                valueAnimator.addUpdateListener { animation ->
+                                                    val v = animation.animatedFraction
+                                                    val lng =
+                                                        v * endPosition.longitude + (1 - v) * startPosition.longitude
+                                                    val lat =
+                                                        v * endPosition.latitude + (1 - v) * startPosition.latitude
+                                                    marker.position =
+                                                        LatLng(lat, lng) // Update marker position
+                                                }
+                                                valueAnimator.start()
+                                            }
+                                        }
 
 
+                                        override fun onGeoQueryReady() {
+                                            pendingQueries--
+                                            if (pendingQueries == 0L) {
+                                                addDriverMarker()
+                                            }
+                                        }
 
-                                    override fun onGeoQueryReady() {
-                                        pendingQueries--
-                                        if (pendingQueries == 0L) {
-                                            addDriverMarker()
+                                        override fun onGeoQueryError(error: DatabaseError?) {
+                                            Snackbar.make(
+                                                requireView(),
+                                                error?.message ?: "GeoQuery error",
+                                                Snackbar.LENGTH_SHORT
+                                            ).show()
+                                            pendingQueries--
+                                            if (pendingQueries == 0L) {
+                                                addDriverMarker()
+                                            }
                                         }
-                                    }
-                                    override fun onGeoQueryError(error: DatabaseError?) {
-                                        Snackbar.make(requireView(), error?.message ?: "GeoQuery error", Snackbar.LENGTH_SHORT).show()
-                                        pendingQueries--
-                                        if (pendingQueries == 0L) {
-                                            addDriverMarker()
-                                        }
-                                    }
-                                })
+                                    })
+                                }
                             }
-                        }
-                        override fun onCancelled(error: DatabaseError) {
-                            Snackbar.make(requireView(), error.message, Snackbar.LENGTH_SHORT).show()
-                        }
-                    })
+
+                            override fun onCancelled(error: DatabaseError) {
+                                Snackbar.make(requireView(), error.message, Snackbar.LENGTH_SHORT)
+                                    .show()
+                            }
+                        })
+                    }
+                    else {
+                        Snackbar.make(requireView(), getString(R.string.city_name_not_found), Snackbar.LENGTH_SHORT).show()
+                    }
 
                 } catch (e: IOException) {
                     Snackbar.make(requireView(),getString(R.string.permission_require), Snackbar.LENGTH_SHORT).show()

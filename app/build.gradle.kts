@@ -20,6 +20,7 @@ android {
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
     }
 
     buildTypes {
@@ -92,23 +93,36 @@ dependencies {
     implementation ("de.hdodenhof:circleimageview:3.1.0")
 
 // Retrofit
-    implementation ("com.squareup.retrofit2:adapter-rxjava2:2.6.1")
     implementation ("com.squareup.retrofit2:converter-scalars:2.6.1")
     implementation ("com.squareup.retrofit2:converter-gson:2.6.1")
 
-    // RxJava
+// RxJava2 support
+    implementation ("com.squareup.retrofit2:adapter-rxjava2:2.9.0")
     implementation ("io.reactivex.rxjava2:rxjava:2.2.21")
-
-// RxAndroid (for AndroidSchedulers.mainThread())
     implementation ("io.reactivex.rxjava2:rxandroid:2.1.1")
 
-// Retrofit with RxJava adapter
-    implementation ("com.squareup.retrofit2:adapter-rxjava2:2.9.0")
 
     // RxJava 3
     implementation ("io.reactivex.rxjava3:rxjava:3.1.5")
     implementation ("io.reactivex.rxjava3:rxandroid:3.0.2")
     implementation ("com.squareup.retrofit2:adapter-rxjava3:2.9.0")
+
+
+    // Google Places and Sliding Up
+    implementation ("com.sothree.slidinguppanel:library:3.4.0")
+    implementation ("com.google.android.libraries.places:places:3.4.0")
+
+    implementation ("com.android.volley:volley:1.2.1")
+
+    implementation ("androidx.media:media:1.6.0") // or latest stable version
+
+    implementation ("org.greenrobot:eventbus:3.3.1")
+    implementation ("com.google.maps.android:android-maps-utils:3.8.0")
+
+    implementation("com.google.android.libraries.mapsplatform.secrets-gradle-plugin:secrets-gradle-plugin:2.0.1")
+
+
+
 
 
 

@@ -2,6 +2,7 @@
 <resources>
     <color name="black">#FF000000</color>
     <color name="white">#FFFFFFFF</color>
+    <color name="darker_gray">#3E3A3A</color>
     <color name="brown">#310404</color>
     <color name="red">#EF0808</color>
     <color name="edit_text_color">#FFD6CF</color>
@@ -11,4 +12,5 @@
     <color name="colorPrimary">#FFFFFF</color>
     <color name="colorPrimaryDark">#CCCCCC</color>
     <color name="colorAccent">#000000</color>
+
 </resources>
