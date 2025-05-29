@@ -2,21 +2,24 @@
 
 import android.Manifest
 import android.animation.ValueAnimator
+import android.content.pm.PackageManager
 import android.graphics.Color
 import android.graphics.drawable.ColorDrawable
+import android.location.Location
 import androidx.appcompat.app.AppCompatActivity
 import android.os.Bundle
 import android.util.Log
 import android.view.View
 import android.view.animation.LinearInterpolator
-import android.widget.RelativeLayout
+import com.google.android.gms.location.FusedLocationProviderClient
 import android.widget.TextView
 import android.widget.Toast
 import androidx.annotation.RequiresPermission
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
 import com.example.uberriderremake.Model.EventBus.SelectedPlaceEvent
 import com.example.uberriderremake.Remote.IGoogleAPI
 import com.example.uberriderremake.Remote.RetrofitClient
-
 import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.GoogleMap
 import com.google.android.gms.maps.OnMapReadyCallback
@@ -24,7 +27,15 @@ import com.google.android.gms.maps.SupportMapFragment
 import com.google.android.gms.maps.model.LatLng
 import com.google.android.gms.maps.model.MarkerOptions
 import com.example.uberriderremake.databinding.ActivityRequestDriverBinding
+import com.example.uberriderremake.databinding.LayoutConfirmPickupBinding
+import com.example.uberriderremake.databinding.LayoutConfirmUberBinding
+import com.example.uberriderremake.databinding.LayoutFindingYourDriverBinding
+import com.example.uberriderremake.databinding.OriginInfoWindowsBinding
+import com.google.android.gms.location.LocationServices
 import com.google.android.gms.maps.model.BitmapDescriptorFactory
+import com.google.android.gms.maps.model.CameraPosition
+import com.google.android.gms.maps.model.Circle
+import com.google.android.gms.maps.model.CircleOptions
 import com.google.android.gms.maps.model.JointType
 import com.google.android.gms.maps.model.LatLngBounds
 import com.google.android.gms.maps.model.MapStyleOptions
@@ -42,13 +53,34 @@ import org.greenrobot.eventbus.EventBus
 import org.greenrobot.eventbus.Subscribe
 import org.greenrobot.eventbus.ThreadMode
 import org.json.JSONObject
-import retrofit2.create
-import kotlin.time.Duration
+
 
  class RequestDriverActivity : AppCompatActivity(), OnMapReadyCallback {
 
+     companion object {
+         private const val LOCATION_PERMISSION_REQUEST_CODE = 1001
+     }
+
+     // Spinning Animation
+     var animator: ValueAnimator?=null
+     private val DESIRED_NUM_OF_SPINS = 5
+     private val DESIRED_SECONDS_PER_ONE_FULL_360_SPIN = 40
+
+
+     // Effects
+     var lastUserCircle: Circle?= null
+     val duration = 1000
+     var lastPulseAnimator: ValueAnimator?= null
+
     internal lateinit var mMap: GoogleMap
     private lateinit var binding: ActivityRequestDriverBinding
+     private lateinit var confirmUberBinding: LayoutConfirmUberBinding
+     private lateinit var confirmPickupBinding: LayoutConfirmPickupBinding
+     internal lateinit var originInfoBinding: OriginInfoWindowsBinding
+     private lateinit var findingDriverBinding: LayoutFindingYourDriverBinding
+
+
+     internal lateinit var txt_origin: TextView
 
     internal var selectedPlaceEvent: SelectedPlaceEvent? = null
 
@@ -65,9 +97,10 @@ import kotlin.time.Duration
      internal var originMarker: Marker?= null
      internal var destinationMarker: Marker?= null
 
+     private lateinit var fusedLocationProviderClient: FusedLocationProviderClient
 
 
-    override fun onStart() {
+     override fun onStart() {
         if(!EventBus.getDefault().isRegistered(this))
             EventBus.getDefault().register(this)
         super.onStart()
@@ -91,6 +124,14 @@ import kotlin.time.Duration
 
         binding = ActivityRequestDriverBinding.inflate(layoutInflater)
         setContentView(binding.root)
+        confirmUberBinding = LayoutConfirmUberBinding.bind(binding.includeConfirmUber.root)
+        confirmPickupBinding = LayoutConfirmPickupBinding.bind(binding.includeConfirmPickup.root)
+        val originInfoWindowView = layoutInflater.inflate(R.layout.origin_info_windows, null)
+        originInfoBinding = OriginInfoWindowsBinding.bind(originInfoWindowView)
+        findingDriverBinding = LayoutFindingYourDriverBinding.bind(binding.includeFindingYourDriver.root)
+
+
+        fusedLocationProviderClient = LocationServices.getFusedLocationProviderClient(this)
 
         init()
 
@@ -103,9 +144,115 @@ import kotlin.time.Duration
      private fun init() {
          iGoogleAPI = RetrofitClient.instance!!.create(IGoogleAPI::class.java)
 
+         // Event
+         confirmUberBinding.btnConfirmUber.setOnClickListener {
+             confirmPickupBinding.confirmPickupLayout.visibility = View.VISIBLE
+             confirmUberBinding.confirmUberLayout.visibility = View.GONE
+
+
+             setDataPickup()
+         }
+
+         confirmPickupBinding.btnConfirmPickup.setOnClickListener {
+             if(mMap == null) return@setOnClickListener
+             if(selectedPlaceEvent == null) return@setOnClickListener
+
+             // Clear map
+             mMap.clear()
+
+             // Tilt
+             val cameraPos = CameraPosition.Builder().target(selectedPlaceEvent!!.origin)
+                 .tilt(45f)
+                 .zoom(16f)
+                 .build()
+             mMap.moveCamera(CameraUpdateFactory.newCameraPosition(cameraPos))
+
+             // Start Animation
+             addMarkerWithPulseAnimation()
+
+         }
      }
 
-    /**
+     private fun addMarkerWithPulseAnimation() {
+         confirmPickupBinding.confirmPickupLayout.visibility = View.GONE
+         binding.fillMaps.visibility = View.VISIBLE
+         findingDriverBinding.findingYourRideLayout.visibility = View.VISIBLE
+
+         originMarker = mMap.addMarker(MarkerOptions().icon(BitmapDescriptorFactory.defaultMarker())
+             .position(selectedPlaceEvent!!.origin))
+
+
+         addPulsatingEffect(selectedPlaceEvent!!.origin)
+     }
+
+     private fun addPulsatingEffect(origin: LatLng) {
+         if(lastPulseAnimator != null) lastPulseAnimator!!.cancel()
+         if(lastUserCircle != null) lastUserCircle!!.center = origin
+         lastPulseAnimator = Common.valueAnimate(duration, object : ValueAnimator.AnimatorUpdateListener{
+             override fun onAnimationUpdate(animation: ValueAnimator) {
+                 if(lastUserCircle != null) lastUserCircle!!.radius = animation!!.animatedValue.toString().toDouble() else {
+                     lastUserCircle = mMap.addCircle(CircleOptions()
+                         .center(origin)
+                         .radius(animation!!.animatedValue.toString().toDouble())
+                         .strokeColor(Color.WHITE)
+                         .fillColor(ContextCompat.getColor(this@RequestDriverActivity, R.color.map_darker))
+                     )
+                 }
+             }
+
+         })
+
+         // Start Rotating Camera
+         startMapCameraSpinningAnimation(mMap.cameraPosition.target)
+
+     }
+
+     private fun startMapCameraSpinningAnimation(target: LatLng) {
+         if(animator != null) animator!!.cancel()
+         animator = ValueAnimator.ofFloat(0f,(DESIRED_NUM_OF_SPINS*360).toFloat())
+         animator!!.duration = (DESIRED_NUM_OF_SPINS*DESIRED_SECONDS_PER_ONE_FULL_360_SPIN*1000).toLong()
+         animator!!.interpolator = LinearInterpolator()
+         animator!!.startDelay = (100)
+         animator!!.addUpdateListener { valueAnimator ->
+             val newBearingValue = valueAnimator.animatedValue as Float
+             mMap.moveCamera(CameraUpdateFactory.newCameraPosition(CameraPosition.Builder()
+                 .target(target)
+                 .zoom(16f)
+                 .tilt(45f)
+                 .bearing(newBearingValue)
+                 .build()
+             ))
+
+         }
+         animator!!.start()
+     }
+
+     override fun onDestroy() {
+         if(animator != null) animator!!.end()
+         super.onDestroy()
+     }
+
+     private fun setDataPickup() {
+         confirmPickupBinding.txtAddressPickup.text  = if(true) originInfoBinding.txtOrigin.text else "None"
+         mMap.clear()
+
+         addPickupMarker()
+     }
+
+     private fun addPickupMarker() {
+         val view = layoutInflater.inflate(R.layout.pickup_info_window, null)
+
+         val generator = IconGenerator(this)
+         generator.setContentView(view)
+         generator.setBackground(ColorDrawable(Color.TRANSPARENT))
+         val icon = generator.makeIcon()
+         originMarker = mMap.addMarker(MarkerOptions()
+             .icon(BitmapDescriptorFactory.fromBitmap(icon))
+             .position(selectedPlaceEvent!!.origin))
+
+     }
+
+     /**
      * Manipulates the map once available.
      * This callback is triggered when the map is ready to be used.
      * This is where we can add markers or lines, add listeners or move the camera. In this case,
@@ -118,12 +265,12 @@ import kotlin.time.Duration
     override fun onMapReady(googleMap: GoogleMap) {
         mMap = googleMap
 
-       mMap.isMyLocationEnabled = true
-        mMap.uiSettings.isMyLocationButtonEnabled = true
-        mMap.setOnMapClickListener {
-            mMap.animateCamera(CameraUpdateFactory.newLatLngZoom(selectedPlaceEvent!!.origin, 18f))
-            true
-        }
+         // Check location permission and enable location
+         if (checkLocationPermission()) {
+             enableMyLocation()
+         } else {
+             requestLocationPermission()
+         }
 
         selectedPlaceEvent?.let {
             drawPath(it)
@@ -133,15 +280,6 @@ import kotlin.time.Duration
         }
 
 
-        // Layout Button
-        val locationButton = (findViewById<View>("1".toInt())!!.parent!! as View)
-            .findViewById<View>("2".toInt())
-        val params = locationButton.layoutParams as RelativeLayout.LayoutParams
-        params.addRule(RelativeLayout.ALIGN_PARENT_TOP, 0)
-        params.addRule(RelativeLayout.ALIGN_PARENT_BOTTOM, RelativeLayout.TRUE)
-        params.bottomMargin = 250          // Move to see Zoom Control
-
-        mMap.uiSettings.isZoomControlsEnabled = true
         try {
             val success = googleMap.setMapStyle(MapStyleOptions.loadRawResourceStyle(this,
                 R.raw.uber_maps_style))
@@ -154,13 +292,68 @@ import kotlin.time.Duration
 
     }
 
+
+     private fun checkLocationPermission(): Boolean {
+         return (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
+                 && ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED)
+     }
+
+     private fun requestLocationPermission() {
+         ActivityCompat.requestPermissions(
+             this,
+             arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION),
+             LOCATION_PERMISSION_REQUEST_CODE
+         )
+     }
+
+     private fun enableMyLocation() {
+         if (checkLocationPermission()) {
+             mMap.isMyLocationEnabled = true
+             getDeviceLocation()
+         }
+     }
+
+     @RequiresPermission(allOf = [Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION])
+     private fun getDeviceLocation() {
+         fusedLocationProviderClient.lastLocation.addOnSuccessListener { location: Location? ->
+             if (location != null) {
+                 val currentLatLng = LatLng(location.latitude, location.longitude)
+                 mMap.animateCamera(CameraUpdateFactory.newLatLngZoom(currentLatLng, 15f))
+
+             } else {
+                 Toast.makeText(this, "Unable to get current location", Toast.LENGTH_SHORT).show()
+             }
+         }.addOnFailureListener {
+             Toast.makeText(this, "Failed to get location: ${it.message}", Toast.LENGTH_SHORT).show()
+         }
+     }
+
+     // Handle permission request result
+     override fun onRequestPermissionsResult(
+         requestCode: Int, permissions: Array<out String>, grantResults: IntArray
+     ) {
+         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+
+         if (requestCode == LOCATION_PERMISSION_REQUEST_CODE) {
+             if (grantResults.isNotEmpty()
+                 && grantResults[0] == PackageManager.PERMISSION_GRANTED
+                 && grantResults[1] == PackageManager.PERMISSION_GRANTED
+             ) {
+                 enableMyLocation()
+             } else {
+                 Toast.makeText(this, "Location permission denied", Toast.LENGTH_SHORT).show()
+             }
+         }
+     }
+
+
      private fun drawPath(selectedPlaceEvent: SelectedPlaceEvent) {
          // Request API
          compositeDisposable.add(iGoogleAPI.getDirections("driving",
              "less_driving",
              selectedPlaceEvent.originString, selectedPlaceEvent.destinationString,
              getString(R.string.maps_directions_api_key))
-         !!.subscribeOn(Schedulers.io())
+             .subscribeOn(Schedulers.io())
              .observeOn(AndroidSchedulers.mainThread())
              .subscribe { returnResult ->
                  Log.d("API_RETURN", returnResult)
@@ -238,34 +431,61 @@ import kotlin.time.Duration
      }
  }
 
- private fun RequestDriverActivity.addDestinationMarker(endAddress:String) {
-     val view = layoutInflater.inflate(R.layout.destination_info_windows, null)
-     val txt_destination = view.findViewById<View>(R.id.txt_destination) as TextView
 
-     txt_destination.text  = Common.formatAddress(endAddress)
-
-     val generator = IconGenerator(this)
-     generator.setContentView(view)
-     generator.setBackground(ColorDrawable(Color.TRANSPARENT))
-     val icon = generator.makeIcon()
-     destinationMarker = mMap.addMarker(MarkerOptions().icon(BitmapDescriptorFactory.fromBitmap(icon)).position(selectedPlaceEvent!!.destination))
-
- }
-
- private fun RequestDriverActivity.addOriginMarker(duration: String, startAddress: String) {
-
+ private fun RequestDriverActivity.addOriginMarker(duration: String, start_address: String) {
      val view = layoutInflater.inflate(R.layout.origin_info_windows, null)
-     val txt_time = view.findViewById<View>(R.id.txt_time) as TextView
-     val txt_origin = view.findViewById<View>(R.id.txt_origin) as TextView
+     originInfoBinding = OriginInfoWindowsBinding.bind(view)
 
-     txt_time.text = Common.formatDuration(duration)
-     txt_origin.text  = Common.formatAddress(startAddress)
-
+     originInfoBinding.txtOrigin.text = start_address
+     originInfoBinding.txtTime.text = duration
      val generator = IconGenerator(this)
      generator.setContentView(view)
      generator.setBackground(ColorDrawable(Color.TRANSPARENT))
      val icon = generator.makeIcon()
      originMarker = mMap.addMarker(MarkerOptions().icon(BitmapDescriptorFactory.fromBitmap(icon)).position(selectedPlaceEvent!!.origin))
 
-
+     originMarker?.showInfoWindow()
  }
+
+ private fun RequestDriverActivity.addDestinationMarker(end_address: String) {
+     destinationMarker = mMap.addMarker(
+         MarkerOptions()
+             .icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_RED))
+             .position(selectedPlaceEvent!!.destination)
+             .title(end_address)
+     )
+     destinationMarker?.showInfoWindow()
+ }
+
+
+// private fun RequestDriverActivity.addDestinationMarker(endAddress:String) {
+//     val view = layoutInflater.inflate(R.layout.destination_info_windows, null)
+//     val txt_destination = view.findViewById<View>(R.id.txt_destination) as TextView
+//
+//     txt_destination.text  = Common.formatAddress(endAddress)
+//
+//     val generator = IconGenerator(this)
+//     generator.setContentView(view)
+//     generator.setBackground(ColorDrawable(Color.TRANSPARENT))
+//     val icon = generator.makeIcon()
+//     destinationMarker = mMap.addMarker(MarkerOptions().icon(BitmapDescriptorFactory.fromBitmap(icon)).position(selectedPlaceEvent!!.destination))
+//
+// }
+//
+// private fun RequestDriverActivity.addOriginMarker(duration: String, startAddress: String) {
+//
+//     val view = layoutInflater.inflate(R.layout.origin_info_windows, null)
+//     val txt_time = view.findViewById<View>(R.id.txt_time) as TextView
+//     txt_origin = view.findViewById<View>(R.id.txt_origin) as TextView
+//
+//     txt_time.text = Common.formatDuration(duration)
+//     txt_origin.text  = Common.formatAddress(startAddress)
+//
+//     val generator = IconGenerator(this)
+//     generator.setContentView(view)
+//     generator.setBackground(ColorDrawable(Color.TRANSPARENT))
+//     val icon = generator.makeIcon()
+//     originMarker = mMap.addMarker(MarkerOptions().icon(BitmapDescriptorFactory.fromBitmap(icon)).position(selectedPlaceEvent!!.origin))
+//
+//
+// }

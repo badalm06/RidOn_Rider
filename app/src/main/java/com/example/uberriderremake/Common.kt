@@ -1,5 +1,7 @@
 package com.example.uberriderremake
 
+import android.animation.ValueAnimator
+import android.animation.ValueAnimator.AnimatorUpdateListener
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -157,6 +159,16 @@ object Common {
     fun formatAddress(startAddress:String): CharSequence? {
         val firstIndexComma = startAddress.indexOf(",")
         return startAddress.substring(0, firstIndexComma)
+    }
+
+    fun valueAnimate(duration: Int, listener: AnimatorUpdateListener): ValueAnimator {
+        val va = ValueAnimator.ofFloat(0f, 100f)
+        va.duration = duration.toLong()
+        va.addUpdateListener(listener)
+        va.repeatCount = ValueAnimator.INFINITE
+        va.repeatMode = ValueAnimator.RESTART
+        va.start()
+        return va
     }
 
 

@@ -35,6 +35,7 @@
             android:value="AIzaSyAlOAmMTTK2Gg8veYFcDhj7H-EyXJjQhfo" />
 
         <activity
+            android:theme="@style/Theme.AppCompat.NoActionBar"
             android:name=".RequestDriverActivity"
             android:exported="false"
             android:label="@string/title_activity_request_driver" />

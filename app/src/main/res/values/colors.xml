@@ -12,5 +12,7 @@
     <color name="colorPrimary">#FFFFFF</color>
     <color name="colorPrimaryDark">#CCCCCC</color>
     <color name="colorAccent">#000000</color>
+    <color name="blue_uber">#2c6ff2</color>
+    <color name="map_darker">#66333333</color>
 
 </resources>
