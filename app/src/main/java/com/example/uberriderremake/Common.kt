@@ -80,7 +80,8 @@ object Common {
     val RIDER_LOCATION_REFERENCE: String="RidersLocation"
     var currentUserRider: User_rider?=null
     val DRIVERS_LOCATION_REFERENCE: String = "users"
-    val driversFound: MutableSet<DriverGeoModel> = mutableSetOf()
+    //val driversFound: MutableSet<DriverGeoModel> = mutableSetOf()
+    val driversFound: MutableMap<String, DriverGeoModel> = HashMap<String, DriverGeoModel> ()
     val DRIVER_INFO_REFERENCE: String = "users"
     val markerList: MutableMap<String, Marker?> = HashMap<String, Marker?>()
     internal val driverInfoMap = HashMap<String, DriverInfoModel>()

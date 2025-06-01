@@ -225,6 +225,38 @@ import org.json.JSONObject
 
          }
          animator!!.start()
+
+         findNearbyDriver(target)
+     }
+
+     private fun findNearbyDriver(target: LatLng?) {
+         if(Common.driversFound.size > 0) {
+             var min = 0f
+             var foundDriver = Common.driversFound[Common.driversFound.keys.iterator().next()]   // Default found driver is the fist driver
+             val currentRiderLocation = Location("")
+             currentRiderLocation.latitude = target!!.latitude
+             currentRiderLocation.longitude = target!!.longitude
+
+             for(key in Common.driversFound.keys) {
+                 val driverLocation = Location("")
+                 driverLocation.latitude = Common.driversFound[key]!!.geoLocation!!.latitude
+                 driverLocation.longitude = Common.driversFound[key]!!.geoLocation!!.longitude
+
+                 if(min == 0f) {
+                     min = driverLocation.distanceTo(currentRiderLocation)
+                     foundDriver = Common.driversFound[key]
+                 }
+                 else if(driverLocation.distanceTo(currentRiderLocation) < min)
+                 {
+                     min = driverLocation.distanceTo(currentRiderLocation)
+                     foundDriver = Common.driversFound[key]
+                 }
+             }
+             Snackbar.make(binding.mainLayout, StringBuilder("Found Driver: ").append(foundDriver!!.driverInfoModel!!.phone), Snackbar.LENGTH_LONG).show()
+         }
+         else {
+             Snackbar.make(binding.mainLayout, getString(R.string.drivers_not_found), Snackbar.LENGTH_LONG).show()
+         }
      }
 
      override fun onDestroy() {

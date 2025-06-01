@@ -416,12 +416,9 @@ class HomeFragment : Fragment(), OnMapReadyCallback, FirebaseDriverInfoListener 
                                                 val alreadyExists =
                                                     Common.driversFound.any { it.key == key }
                                                 if (!alreadyExists) {
-                                                    Common.driversFound.add(
-                                                        DriverGeoModel(
-                                                            key,
-                                                            geoLocation
-                                                        )
-                                                    )
+                                                    //Common.driversFound.add(DriverGeoModel(key, geoLocation))
+                                                    if(!Common.driversFound.containsKey(key))
+                                                        Common.driversFound[key!!] = DriverGeoModel(key, geoLocation)
                                                     Log.d(
                                                         "DRIVER_DEBUG",
                                                         "Adding driver: $key at ${geoLocation.latitude}, ${geoLocation.longitude}"
@@ -518,12 +515,12 @@ class HomeFragment : Fragment(), OnMapReadyCallback, FirebaseDriverInfoListener 
     private fun addDriverMarker() {
         Log.d("DRIVER_DEBUG", "driversFound size1x: ${Common.driversFound.size}")
         if(Common.driversFound.isNotEmpty()) {
-            Observable.fromIterable(Common.driversFound)
+            Observable.fromIterable(Common.driversFound.keys)
                 .subscribeOn(Schedulers.newThread())
                 .observeOn(AndroidSchedulers.mainThread())
                 .subscribe(
-                    { driverGeoModel: DriverGeoModel? ->
-                        findDriverByKey(driverGeoModel)
+                    { key: String? ->
+                        findDriverByKey(Common.driversFound[key!!])
                     },
                     {
                         t : Throwable? -> Snackbar.make(requireView(), t!!.message!!, Snackbar.LENGTH_SHORT).show()
@@ -544,6 +541,7 @@ class HomeFragment : Fragment(), OnMapReadyCallback, FirebaseDriverInfoListener 
                 override fun onDataChange(snapshot: DataSnapshot) {
                     if (snapshot.exists()) {
                         val driverInfoModel = snapshot.getValue(DriverInfoModel::class.java)
+                        Common.driversFound[driverGeoModel.key!!]!!.driverInfoModel = snapshot.getValue(DriverInfoModel::class.java)
                         if (driverInfoModel != null) {
                             Common.driverInfoMap[driverGeoModel.key!!] = driverInfoModel
                             // Attach the driver info to the geo model
