@@ -31,6 +31,8 @@ import com.example.uberriderremake.databinding.LayoutConfirmPickupBinding
 import com.example.uberriderremake.databinding.LayoutConfirmUberBinding
 import com.example.uberriderremake.databinding.LayoutFindingYourDriverBinding
 import com.example.uberriderremake.databinding.OriginInfoWindowsBinding
+import com.example.uberriderremake.login.User_rider
+import com.firebase.ui.auth.data.model.User
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.maps.model.BitmapDescriptorFactory
 import com.google.android.gms.maps.model.CameraPosition
@@ -252,7 +254,13 @@ import org.json.JSONObject
                      foundDriver = Common.driversFound[key]
                  }
              }
-             Snackbar.make(binding.mainLayout, StringBuilder("Found Driver: ").append(foundDriver!!.driverInfoModel!!.phone), Snackbar.LENGTH_LONG).show()
+             //Snackbar.make(binding.mainLayout, StringBuilder("Found Driver: ").append(foundDriver!!.driverInfoModel!!.phone), Snackbar.LENGTH_LONG).show()
+
+             User_rider.sendRequestToDriver(this@RequestDriverActivity,
+                 binding.mainLayout,
+                 foundDriver,
+                 target
+             )
          }
          else {
              Snackbar.make(binding.mainLayout, getString(R.string.drivers_not_found), Snackbar.LENGTH_LONG).show()

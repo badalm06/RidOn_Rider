@@ -57,13 +57,64 @@ class EditProfileActivity : AppCompatActivity() {
             profileImageView = binding.profileImage
 
             binding.btnBack.setOnClickListener {
-                startActivity(Intent(this, HomeActivity::class.java))
-                finish()
+                val name = binding.etName.text.toString().trim()
+                val phone = binding.etPhone.text.toString().trim()
+                val email = binding.etEmail.text.toString().trim()
+
+                var isValid = true
+
+                if (name.isEmpty()) {
+                    binding.etName.error = "Name is required"
+                    isValid = false
+                }
+                if (phone.isEmpty()) {
+                    binding.etPhone.error = "Phone number is required"
+                    isValid = false
+                }
+                if (email.isEmpty()) {
+                    binding.etEmail.error = "Email is required"
+                    isValid = false
+                } else if (!android.util.Patterns.EMAIL_ADDRESS.matcher(email).matches()) {
+                    binding.etEmail.error = "Enter a valid email"
+                    isValid = false
+                }
+
+                if (isValid) {
+                    // Save profile before navigating
+                    saveUserProfileAndNavigateToHome()
+                }
+                // If not valid, errors will be shown and navigation will not happen
             }
 
+
             binding.driverActivityButton.setOnClickListener {
-                startActivity(Intent(this, HomeActivity::class.java))
-                finish()
+                val name = binding.etName.text.toString().trim()
+                val phone = binding.etPhone.text.toString().trim()
+                val email = binding.etEmail.text.toString().trim()
+
+                var isValid = true
+
+                if (name.isEmpty()) {
+                    binding.etName.error = "Name is required"
+                    isValid = false
+                }
+                if (phone.isEmpty()) {
+                    binding.etPhone.error = "Phone number is required"
+                    isValid = false
+                }
+                if (email.isEmpty()) {
+                    binding.etEmail.error = "Email is required"
+                    isValid = false
+                } else if (!android.util.Patterns.EMAIL_ADDRESS.matcher(email).matches()) {
+                    binding.etEmail.error = "Enter a valid email"
+                    isValid = false
+                }
+
+                if (isValid) {
+                    // Save profile before navigating
+                    saveUserProfileAndNavigate()
+                }
+                // If not valid, errors will be shown and navigation will not happen
             }
 
 
@@ -89,6 +140,23 @@ class EditProfileActivity : AppCompatActivity() {
                 finish()
             }
         }
+
+    private fun saveUserProfileAndNavigate() {
+        saveUserProfile {
+            // This block runs only after a successful save
+            startActivity(Intent(this, HomeActivity::class.java))
+            finish()
+        }
+    }
+
+    private fun saveUserProfileAndNavigateToHome() {
+        saveUserProfile {
+            // This block runs only after a successful save
+            startActivity(Intent(this, HomeActivity::class.java))
+            finish()
+        }
+    }
+
 
 
     private fun loadUserProfile() {
@@ -153,157 +221,161 @@ class EditProfileActivity : AppCompatActivity() {
                 })
         }
 
-        private fun toggleEditMode() {
-            isEditing = !isEditing
-            setEditable(isEditing)
-            binding.editBtn.text = if (isEditing) "Save" else "Edit"
-            if (!isEditing) {
-                saveUserProfile()
+    private fun toggleEditMode() {
+        isEditing = !isEditing
+        setEditable(isEditing)
+        binding.editBtn.text = if (isEditing) "Save" else "Edit"
+        if (!isEditing) {
+            // Only save, do not navigate here
+            saveUserProfile {
+                // Optional: You can show a toast or update UI after save if needed
+                Toast.makeText(this, "Profile updated", Toast.LENGTH_SHORT).show()
             }
         }
+    }
 
-        private fun setEditable(editable: Boolean) {
+
+    private fun setEditable(editable: Boolean) {
             binding.etName.isEnabled = editable
             binding.etPhone.isEnabled = editable
             binding.etEmail.isEnabled = editable
 
         }
 
-        private fun saveUserProfile() {
-            val name = binding.etName.text.toString()
-            val phone = binding.etPhone.text.toString()
-            val email = binding.etEmail.text.toString()
+    private fun saveUserProfile(onSuccess: () -> Unit) {
+        val name = binding.etName.text.toString()
+        val phone = binding.etPhone.text.toString()
+        val email = binding.etEmail.text.toString()
 
-            database.child(userRider.uid).child("phone").addListenerForSingleValueEvent(object : ValueEventListener {
-                override fun onDataChange(snapshot: DataSnapshot) {
-                    val currentPhone = snapshot.getValue(String::class.java)
-                    if (currentPhone != phone) {
-                        sendOtpForVerification(phone, name, email)
+        database.child(userRider.uid).child("phone").addListenerForSingleValueEvent(object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                val currentPhone = snapshot.getValue(String::class.java)
+                if (currentPhone != phone) {
+                    sendOtpForVerification(phone, name, email, onSuccess)
+                } else {
+                    if (selectedImageUri != null) {
+                        uploadImageAndSaveProfile(name, phone, email, onSuccess)
                     } else {
-                        if (selectedImageUri != null) {
-                            uploadImageAndSaveProfile(name, phone, email)
-                        } else {
-                            updateProfile(name, phone, email, null)
-                        }
+                        updateProfile(name, phone, email, null, onSuccess)
                     }
                 }
-
-                override fun onCancelled(error: DatabaseError) {
-                    Toast.makeText(this@EditProfileActivity, "Failed to check phone", Toast.LENGTH_SHORT).show()
-                }
-            })
-        }
-
-        private fun uploadImageAndSaveProfile(name: String, phone: String, email: String) {
-            storageReference.putFile(selectedImageUri!!)
-                .addOnSuccessListener {
-                    Toast.makeText(this, "Image Uploaded", Toast.LENGTH_SHORT).show()
-                    storageReference.downloadUrl.addOnSuccessListener { uri ->
-                        val imageUrl = uri.toString()
-                        Glide.with(this).load(uri).into(profileImageView)
-                        updateProfile(name, phone, email, imageUrl)
-                    }
-                }
-                .addOnFailureListener {
-                    Toast.makeText(this, "Image upload failed", Toast.LENGTH_SHORT).show()
-                    updateProfile(name, phone, email, null)
-                }
-        }
-
-        private fun sendOtpForVerification(phoneNumber: String, name: String, email: String) {
-            val options = PhoneAuthOptions.newBuilder(FirebaseAuth.getInstance())
-                .setPhoneNumber("+91$phoneNumber")
-                .setTimeout(60L, TimeUnit.SECONDS)
-                .setActivity(this)
-                .setCallbacks(object : PhoneAuthProvider.OnVerificationStateChangedCallbacks() {
-                    override fun onVerificationCompleted(credential: PhoneAuthCredential) {
-                        verifyOtpAndSave(credential, name, phoneNumber, email)
-                    }
-
-                    override fun onVerificationFailed(e: FirebaseException) {
-                        Toast.makeText(this@EditProfileActivity, "OTP failed: ${e.message}", Toast.LENGTH_LONG).show()
-                    }
-
-                    override fun onCodeSent(verificationId: String, token: PhoneAuthProvider.ForceResendingToken) {
-                        showOtpDialog(verificationId, name, phoneNumber, email)
-                    }
-                }).build()
-
-            PhoneAuthProvider.verifyPhoneNumber(options)
-        }
-
-        private fun showOtpDialog(
-            verificationId: String,
-            name: String,
-            phone: String,
-            email: String
-        ) {
-            val input = EditText(this)
-            input.inputType = InputType.TYPE_CLASS_NUMBER
-
-            AlertDialog.Builder(this)
-                .setTitle("Enter OTP")
-                .setView(input)
-                .setPositiveButton("Verify") { _, _ ->
-                    val otp = input.text.toString()
-                    val credential = PhoneAuthProvider.getCredential(verificationId, otp)
-                    verifyOtpAndSave(credential, name, phone, email)
-                }
-                .setNegativeButton("Cancel", null)
-                .show()
-        }
-
-        private fun verifyOtpAndSave(
-            credential: PhoneAuthCredential,
-            name: String,
-            phone: String,
-            email: String
-        ) {
-            FirebaseAuth.getInstance().signInWithCredential(credential)
-                .addOnCompleteListener { task ->
-                    if (task.isSuccessful) {
-                        if (selectedImageUri != null) {
-                            uploadImageAndSaveProfile(name, phone, email)
-                        } else {
-                            updateProfile(name, phone, email, null)
-                        }
-                    } else {
-                        Toast.makeText(this, "Invalid OTP", Toast.LENGTH_SHORT).show()
-                    }
-                }
-        }
-
-        private fun updateProfile(name: String, phone: String, email: String, imageUrl: String?) {
-            val userData = mutableMapOf<String, Any>(
-                "name" to name,
-                "phone" to phone,
-                "email" to email
-            )
-            if (imageUrl != null) {
-                userData["profileImageUrl"] = imageUrl
             }
 
-            database.child(userRider.uid).updateChildren(userData)
-                .addOnSuccessListener {
-                    Toast.makeText(this, "Profile updated", Toast.LENGTH_SHORT).show()
+            override fun onCancelled(error: DatabaseError) {
+                Toast.makeText(this@EditProfileActivity, "Failed to check phone", Toast.LENGTH_SHORT).show()
+            }
+        })
+    }
 
-                    // ✅ Update Common.currentUser
-                    Common.currentUserRider = User_rider().apply {
-                        this.name = name
-                        this.number = phone
-                        this.email = email
-                        if (imageUrl != null) {
-                            this.profileImageUrl = imageUrl
-                        }
+
+    private fun uploadImageAndSaveProfile(name: String, phone: String, email: String, onSuccess: () -> Unit) {
+        storageReference.putFile(selectedImageUri!!)
+            .addOnSuccessListener {
+                storageReference.downloadUrl.addOnSuccessListener { uri ->
+                    val imageUrl = uri.toString()
+                    Glide.with(this).load(uri).into(profileImageView)
+                    updateProfile(name, phone, email, imageUrl, onSuccess)
+                }
+            }
+            .addOnFailureListener {
+                Toast.makeText(this, "Image upload failed", Toast.LENGTH_SHORT).show()
+                updateProfile(name, phone, email, null, onSuccess)
+            }
+    }
+
+
+    private fun sendOtpForVerification(phoneNumber: String, name: String, email: String, onSuccess: () -> Unit) {
+        val options = PhoneAuthOptions.newBuilder(FirebaseAuth.getInstance())
+            .setPhoneNumber("+91$phoneNumber")
+            .setTimeout(60L, TimeUnit.SECONDS)
+            .setActivity(this)
+            .setCallbacks(object : PhoneAuthProvider.OnVerificationStateChangedCallbacks() {
+                override fun onVerificationCompleted(credential: PhoneAuthCredential) {
+                    verifyOtpAndSave(credential, name, phoneNumber, email, onSuccess)
+                }
+
+                override fun onVerificationFailed(e: FirebaseException) {
+                    Toast.makeText(this@EditProfileActivity, "OTP failed: ${e.message}", Toast.LENGTH_LONG).show()
+                }
+
+                override fun onCodeSent(verificationId: String, token: PhoneAuthProvider.ForceResendingToken) {
+                    showOtpDialog(verificationId, name, phoneNumber, email, onSuccess)
+                }
+            }).build()
+
+        PhoneAuthProvider.verifyPhoneNumber(options)
+    }
+
+
+    private fun showOtpDialog(
+        verificationId: String,
+        name: String,
+        phone: String,
+        email: String,
+        onSuccess: () -> Unit
+    ) {
+        val input = EditText(this)
+        input.inputType = InputType.TYPE_CLASS_NUMBER
+
+        AlertDialog.Builder(this)
+            .setTitle("Enter OTP")
+            .setView(input)
+            .setPositiveButton("Verify") { _, _ ->
+                val otp = input.text.toString()
+                val credential = PhoneAuthProvider.getCredential(verificationId, otp)
+                verifyOtpAndSave(credential, name, phone, email, onSuccess)
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+
+    private fun verifyOtpAndSave(
+        credential: PhoneAuthCredential,
+        name: String,
+        phone: String,
+        email: String,
+        onSuccess: () -> Unit
+    ) {
+        FirebaseAuth.getInstance().signInWithCredential(credential)
+            .addOnCompleteListener { task ->
+                if (task.isSuccessful) {
+                    if (selectedImageUri != null) {
+                        uploadImageAndSaveProfile(name, phone, email, onSuccess)
+                    } else {
+                        updateProfile(name, phone, email, null, onSuccess)
                     }
+                } else {
+                    Toast.makeText(this, "Invalid OTP", Toast.LENGTH_SHORT).show()
                 }
-                .addOnFailureListener {
-                    Toast.makeText(this, "Failed to update profile", Toast.LENGTH_SHORT).show()
-                }
+            }
+    }
+
+
+    private fun updateProfile(name: String, phone: String, email: String, imageUrl: String?, onSuccess: () -> Unit) {
+        val userData = mutableMapOf<String, Any>(
+            "name" to name,
+            "phone" to phone,
+            "email" to email
+        )
+        if (imageUrl != null) {
+            userData["profileImageUrl"] = imageUrl
         }
 
+        database.child(userRider.uid).updateChildren(userData)
+            .addOnSuccessListener {
+                Toast.makeText(this, "Profile updated", Toast.LENGTH_SHORT).show()
+                // Update your local user object if needed
+                onSuccess() // Call the callback only after successful save
+            }
+            .addOnFailureListener {
+                Toast.makeText(this, "Failed to update profile", Toast.LENGTH_SHORT).show()
+            }
+    }
 
-        private fun selectProfileImage() {
+
+
+    private fun selectProfileImage() {
             val intent = Intent(Intent.ACTION_PICK, MediaStore.Images.Media.EXTERNAL_CONTENT_URI)
             startActivityForResult(intent, PICK_IMAGE_REQUEST)
         }

@@ -58,6 +58,7 @@ dependencies {
     implementation(libs.androidx.navigation.ui.ktx)
     implementation(libs.firebase.messaging.ktx)
     implementation(libs.play.services.maps)
+    implementation(libs.firebase.messaging)
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
@@ -120,6 +121,7 @@ dependencies {
     implementation ("com.google.maps.android:android-maps-utils:3.8.0")
 
     implementation("com.google.android.libraries.mapsplatform.secrets-gradle-plugin:secrets-gradle-plugin:2.0.1")
+
 
 
 

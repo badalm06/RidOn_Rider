@@ -7,6 +7,7 @@ import com.example.uberriderremake.login.User_rider
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
+import android.util.Log
 
 class MyFirebaseMessagingService: FirebaseMessagingService() {
     override fun onNewToken(token: String) {
