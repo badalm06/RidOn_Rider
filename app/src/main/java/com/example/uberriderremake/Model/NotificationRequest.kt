@@ -1,11 +1,11 @@
 package com.example.uberriderremake.Model
 
 data class NotificationRequest(
-    val driverUserId: String,
-//    val token: String,
+    val pickup_location: PickupLocation,
     val data: Map<String, String>,
     val notification: NotificationContent
 )
+
 
 data class NotificationContent(
     val title: String,
@@ -15,4 +15,9 @@ data class NotificationContent(
 data class NotificationResponse(
     val success: Boolean,
     val error: String?
+)
+
+data class PickupLocation(
+    val lat: Double,
+    val lng: Double
 )

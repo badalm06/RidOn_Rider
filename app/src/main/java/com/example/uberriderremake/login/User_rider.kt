@@ -11,6 +11,7 @@ import com.example.uberriderremake.Model.FCMSendData
 import com.example.uberriderremake.Model.NotificationContent
 import com.example.uberriderremake.Model.NotificationRequest
 import com.example.uberriderremake.Model.NotificationResponse
+import com.example.uberriderremake.Model.PickupLocation
 import com.example.uberriderremake.R
 import com.example.uberriderremake.Remote.IFCMService
 import com.example.uberriderremake.Remote.RetrofitFCMClient
@@ -81,10 +82,11 @@ data class User_rider(
                             )
 
                             val request = NotificationRequest(
-                                driverUserId = foundDriver!!.key!!, // This is the driver's unique ID
+                                pickup_location = PickupLocation(target.latitude, target.longitude),
                                 notification = notificationContent,
-                                data = notificationData,
+                                data = notificationData
                             )
+
 
                             // Call your backend to send the notification
                             backendService.sendNotification(request).enqueue(object : retrofit2.Callback<NotificationResponse> {
