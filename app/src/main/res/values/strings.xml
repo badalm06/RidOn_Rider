@@ -32,5 +32,10 @@
     <string name="finding_your_ride">Finding your Ride</string>
     <string name="token_not_found">Token not found</string>
     <string name="send_request_driver_failed">Request Driver Failed</string>
+    <string name="uber_x">Hyundai Tycoon\n</string>
+    <string name="car_number">ABC 123\n</string>
+    <string name="driver_name_example">Sharma ji</string>
+    <string name="ascii_dot">■</string>
+    <string name="language_example">Knows English</string>
 
 </resources>

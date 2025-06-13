@@ -2,21 +2,34 @@
 
 import android.Manifest
 import android.animation.ValueAnimator
+import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.graphics.Color
 import android.graphics.drawable.ColorDrawable
 import android.location.Location
+import android.net.Uri
 import androidx.appcompat.app.AppCompatActivity
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
 import android.view.View
 import android.view.animation.LinearInterpolator
+import android.widget.ImageView
+import android.widget.RelativeLayout
 import com.google.android.gms.location.FusedLocationProviderClient
 import android.widget.TextView
 import android.widget.Toast
 import androidx.annotation.RequiresPermission
+import com.google.firebase.database.ValueEventListener
+import androidx.cardview.widget.CardView
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import com.bumptech.glide.Glide
+import com.example.uberriderremake.Model.DriverGeoModel
 import com.example.uberriderremake.Model.EventBus.SelectedPlaceEvent
 import com.example.uberriderremake.Remote.IGoogleAPI
 import com.example.uberriderremake.Remote.RetrofitClient
@@ -29,10 +42,13 @@ import com.google.android.gms.maps.model.MarkerOptions
 import com.example.uberriderremake.databinding.ActivityRequestDriverBinding
 import com.example.uberriderremake.databinding.LayoutConfirmPickupBinding
 import com.example.uberriderremake.databinding.LayoutConfirmUberBinding
+import com.example.uberriderremake.databinding.LayoutDriverInfoBinding
 import com.example.uberriderremake.databinding.LayoutFindingYourDriverBinding
 import com.example.uberriderremake.databinding.OriginInfoWindowsBinding
 import com.example.uberriderremake.login.User_rider
 import com.firebase.ui.auth.data.model.User
+import com.google.android.gms.location.LocationCallback
+import com.google.android.gms.location.LocationResult
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.maps.model.BitmapDescriptorFactory
 import com.google.android.gms.maps.model.CameraPosition
@@ -46,6 +62,11 @@ import com.google.android.gms.maps.model.Polyline
 import com.google.android.gms.maps.model.PolylineOptions
 import com.google.android.gms.maps.model.SquareCap
 import com.google.android.material.snackbar.Snackbar
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.database.DataSnapshot
+import com.google.firebase.database.DatabaseError
+import com.google.firebase.database.FirebaseDatabase
+import com.google.maps.android.PolyUtil
 import com.google.maps.android.ui.IconGenerator
 import io.reactivex.android.schedulers.AndroidSchedulers
 import io.reactivex.disposables.CompositeDisposable
@@ -80,7 +101,19 @@ import org.json.JSONObject
      private lateinit var confirmPickupBinding: LayoutConfirmPickupBinding
      internal lateinit var originInfoBinding: OriginInfoWindowsBinding
      private lateinit var findingDriverBinding: LayoutFindingYourDriverBinding
+     private lateinit var driverInfoBinding: LayoutDriverInfoBinding
 
+
+     private var driverMarker: Marker? = null
+     private var routePolyline: Polyline? = null
+     private var riderMarker: Marker? = null
+
+
+
+
+
+
+     private lateinit var mainLayout: RelativeLayout
 
      internal lateinit var txt_origin: TextView
 
@@ -121,6 +154,7 @@ import org.json.JSONObject
          selectedPlaceEvent = event
      }
 
+    @RequiresPermission(allOf = [Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION])
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -131,9 +165,19 @@ import org.json.JSONObject
         val originInfoWindowView = layoutInflater.inflate(R.layout.origin_info_windows, null)
         originInfoBinding = OriginInfoWindowsBinding.bind(originInfoWindowView)
         findingDriverBinding = LayoutFindingYourDriverBinding.bind(binding.includeFindingYourDriver.root)
+        driverInfoBinding = LayoutDriverInfoBinding.bind(binding.includeDriverInfo.root)
 
+        mainLayout = findViewById(R.id.main_layout)
 
         fusedLocationProviderClient = LocationServices.getFusedLocationProviderClient(this)
+        fusedLocationProviderClient.lastLocation.addOnSuccessListener { location ->
+            if (location != null) {
+                Log.d("Location", "Got location: ${location.latitude}, ${location.longitude}")
+                // Use location here
+            } else {
+                Log.d("Location", "Location is null")
+            }
+        }
 
         init()
 
@@ -172,29 +216,326 @@ import org.json.JSONObject
              // Start Animation
              addMarkerWithPulseAnimation()
 
+             val foundDriver = findNearbyDriver(selectedPlaceEvent)
+             if (foundDriver != null) {
+                 // 1. Get reference to "Trips" node (changed from "Rides")
+                 val tripsRef = FirebaseDatabase.getInstance().getReference("Trips")
+
+                 // 2. Generate a unique trip ID
+                 val tripId = tripsRef.push().key ?: return@setOnClickListener
+
+                 val locationCallback = object : LocationCallback() {
+                     override fun onLocationResult(locationResult: LocationResult) {
+                         val location = locationResult.lastLocation
+                         if (location != null) {
+                             Log.d("DriverLocation", "Got location: ${location.latitude}, ${location.longitude}")
+                             tripsRef.child("currentLat").setValue(location.latitude)
+                             tripsRef.child("currentLng").setValue(location.longitude)
+                         }
+                     }
+                 }
+
+
+                 // 3. Prepare trip data with all fields matching your screenshot
+                 val tripData = mapOf(
+                     "cancel" to false,
+                     "currentLat" to 0.0,
+                     "currentLng" to 0.0,
+                     "destination" to "${selectedPlaceEvent!!.destination.latitude},${selectedPlaceEvent!!.destination.longitude}",
+                     "destinationString" to "${selectedPlaceEvent!!.destination.latitude},${selectedPlaceEvent!!.destination.longitude}",
+                     "distancePickup" to "0.0 mi", // Will be updated by driver
+                     "done" to false,
+                     "driver" to "", // Empty until driver accepts
+                     "origin" to "${selectedPlaceEvent!!.origin.latitude},${selectedPlaceEvent!!.origin.longitude}",
+                     "originString" to "${selectedPlaceEvent!!.origin.latitude},${selectedPlaceEvent!!.origin.longitude}",
+                     "rider" to FirebaseAuth.getInstance().currentUser!!.uid,
+                     "durationPickup" to "0 min" // Will be updated by driver
+                 )
+
+                 // 4. Add the trip entry to Firebase
+                 tripsRef.child(tripId).setValue(tripData)
+                     .addOnSuccessListener {
+                         Log.d("TripRequest", "Trip requested successfully!")
+                         Toast.makeText(this, "Trip requested successfully!", Toast.LENGTH_SHORT).show()
+
+                         // Send notification to driver
+                         User_rider.sendRequestToDriver(
+                             context = this,
+                             mainLayout = mainLayout,
+                             foundDriver = foundDriver,
+                             selectedPlaceEvent = selectedPlaceEvent!!,
+                             tripId = tripId
+                         )
+
+                         val tripRef = FirebaseDatabase.getInstance().getReference("Trips").child(tripId)
+                         tripRef.addValueEventListener(object : ValueEventListener {
+                             override fun onDataChange(snapshot: DataSnapshot) {
+                                 val status = snapshot.child("status").getValue(String::class.java)
+                                 Log.d("TripRequest", "Trip status changed: $status")
+
+                                 // Get rider origin from trip data (THIS IS THE FIX)
+                                 val originString = snapshot.child("origin").getValue(String::class.java) ?: ""
+                                 val riderLatLng = if (originString.isNotEmpty() && originString.contains(",")) {
+                                     val parts = originString.split(",")
+                                     LatLng(parts[0].toDouble(), parts[1].toDouble())
+                                 } else null
+
+                                 val lat = snapshot.child("driverLocation").child("lat").getValue(Double::class.java) ?: 0.0
+                                 val lng = snapshot.child("driverLocation").child("lng").getValue(Double::class.java) ?: 0.0
+                                 val driverLatLng = LatLng(lat, lng)
+
+
+                                 Log.d("TripRequest", "Driver location updated: $driverLatLng")
+                                 Log.d("TripRequest", "Rider location updated: $riderLatLng")
+
+                                 if (lat != 0.0 && lng != 0.0 && riderLatLng != null) {
+                                     updateDriverOnMap(driverLatLng, riderLatLng)
+                                     drawRoute(driverLatLng, riderLatLng)
+
+                                 }
+                                 if (status == "accepted") {
+                                     // --- CLEANUP CODE START ---
+                                     findingDriverBinding.root.visibility = View.GONE
+                                     binding.fillMaps.visibility = View.GONE
+
+                                     lastPulseAnimator?.cancel()
+                                     lastPulseAnimator = null
+
+                                     lastUserCircle?.remove()
+                                     lastUserCircle = null
+
+                                     animator?.cancel()
+                                     animator = null
+                                     // --- CLEANUP CODE END ---
+
+                                     // Get driverId from trip node (could be "driver" or "driverId")
+                                     val driverId = snapshot.child("driverId").getValue(String::class.java)
+                                         ?: snapshot.child("driver").getValue(String::class.java) ?: ""
+                                     Log.d("TripRequest", "Driver ID: $driverId")
+                                     if (driverId.isNotEmpty()) {
+                                         val driverUsersRef =
+                                             FirebaseDatabase.getInstance().getReference("users")
+                                         driverUsersRef.child(driverId)
+                                             .addListenerForSingleValueEvent(object :
+                                                 ValueEventListener {
+                                                 override fun onDataChange(driverSnapshot: DataSnapshot) {
+                                                     val driverName = driverSnapshot.child("name")
+                                                         .getValue(String::class.java) ?: ""
+                                                     val carType = driverSnapshot.child("car")
+                                                         .getValue(String::class.java) ?: ""
+                                                     val carNumber =
+                                                         driverSnapshot.child("carNumber")
+                                                             .getValue(String::class.java) ?: ""
+                                                     val driverImgUrl =
+                                                         driverSnapshot.child("profileImageUrl")
+                                                             .getValue(String::class.java)
+                                                     val driverPhone = driverSnapshot.child("phone")
+                                                         .getValue(String::class.java) ?: ""
+                                                     Log.d(
+                                                         "TripRequest",
+                                                         "Driver info: name=$driverName, car=$carType, carNumber=$carNumber, imgUrl=$driverImgUrl"
+                                                     )
+
+                                                     binding.includeDriverInfo.imgCallDriver.setOnClickListener {
+                                                         if (driverPhone.isNotEmpty()) {
+                                                             val intent = Intent(Intent.ACTION_DIAL)
+                                                             intent.data =
+                                                                 Uri.parse("tel:$driverPhone")
+                                                             startActivity(intent)
+                                                         }
+                                                     }
+
+                                                     // 1. Show toast
+                                                     Toast.makeText(
+                                                         this@RequestDriverActivity,
+                                                         "Your ride is accepted by $driverName",
+                                                         Toast.LENGTH_LONG
+                                                     ).show()
+
+                                                     // 2. Show driver info layout (CardView)
+                                                     binding.includeDriverInfo.driverInfoLayout.visibility =
+                                                         View.VISIBLE
+
+                                                     // 3. Set driver info in the layout
+                                                     binding.includeDriverInfo.txtDriverName.text =
+                                                         driverName
+                                                     binding.includeDriverInfo.txtCarType.text =
+                                                         carType
+                                                     binding.includeDriverInfo.txtCarNumber.text =
+                                                         carNumber
+
+                                                     // 4. Load driver image (if using Glide)
+                                                     if (!driverImgUrl.isNullOrEmpty()) {
+                                                         Glide.with(this@RequestDriverActivity)
+                                                             .load(driverImgUrl)
+                                                             .placeholder(R.drawable.baseline_account_circle_24)
+                                                             .error(R.drawable.baseline_account_circle_24)
+                                                             .into(binding.includeDriverInfo.imgDriver)
+                                                     } else {
+                                                         binding.includeDriverInfo.imgDriver.setImageResource(
+                                                             R.drawable.baseline_account_circle_24
+                                                         )
+                                                     }
+                                                 }
+                                                 override fun onCancelled(error: DatabaseError) {
+                                                     Log.e(
+                                                         "TripRequest",
+                                                         "Failed to fetch driver info: ${error.message}"
+                                                     )
+                                                 }
+                                             })
+
+
+                                     }
+                                 } else {
+                                     Log.d("TripRequest", "Status is not accepted: $status")
+                                 }
+                             }
+                             override fun onCancelled(error: DatabaseError) {
+                                 Log.e("TripRequest", "Trip listener cancelled: ${error.message}")
+                             }
+                         })
+
+                         // Timeout handler: if no driver accepts in 30 seconds
+                         val handler = android.os.Handler(mainLooper)
+                         handler.postDelayed({
+                             tripRef.get().addOnSuccessListener { snapshot ->
+                                 val status = snapshot.child("status").getValue(String::class.java)
+                                 Log.d("TripRequest", "Timeout check, trip status: $status")
+                                 if (status != "accepted") {
+                                     lastPulseAnimator?.cancel()
+                                     lastPulseAnimator = null
+
+                                     lastUserCircle?.remove()
+                                     lastUserCircle = null
+
+                                     animator?.cancel()
+                                     animator = null
+
+                                     Toast.makeText(this, "No nearby driver accepted your ride, try again please.", Toast.LENGTH_LONG).show()
+                                     // Optionally, hide the searching animation/layout
+                                     findingDriverBinding.root.visibility = View.GONE
+                                     binding.fillMaps.visibility = View.GONE
+                                 }
+                             }
+                         }, 30000) // 30 seconds
+                     }
+                     .addOnFailureListener { error ->
+                         Log.e("TripRequest", "Failed to request trip: ${error.message}")
+                         Toast.makeText(this, "Failed to request trip: ${error.message}", Toast.LENGTH_SHORT).show()
+                     }
+
+
+                     .addOnFailureListener { error ->
+                         Toast.makeText(
+                             this,
+                             "Failed to request trip: ${error.message}",
+                             Toast.LENGTH_SHORT
+                         ).show()
+                     }
+             }
+
          }
      }
+
+     private fun updateDriverOnMap(driverLatLng: LatLng, riderLatLng: LatLng) {
+         driverMarker?.remove()
+         riderMarker?.remove()
+         routePolyline?.remove()
+
+         driverMarker = mMap.addMarker(
+             MarkerOptions()
+                 .position(driverLatLng)
+                 .icon(BitmapDescriptorFactory.fromBitmap(resizeBitmap(this, R.drawable.car, 45, 90)))
+                 .title("Driver Location")
+         )
+         riderMarker = mMap.addMarker(
+             MarkerOptions()
+                 .position(riderLatLng)
+                 .icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_RED))
+                 .title("Rider Location")
+         )
+
+         // Move camera to show both markers
+         val bounds = LatLngBounds.builder()
+             .include(driverLatLng)
+             .include(riderLatLng)
+             .build()
+         mMap.animateCamera(CameraUpdateFactory.newLatLngBounds(bounds, 200))
+
+         drawRoute(driverLatLng, riderLatLng)
+     }
+
+     fun resizeBitmap(context: Context, drawableRes: Int, width: Int, height: Int): Bitmap {
+         val imageBitmap = BitmapFactory.decodeResource(context.resources, drawableRes)
+         return Bitmap.createScaledBitmap(imageBitmap, width, height, false)
+     }
+
+     private fun drawRoute(origin: LatLng, destination: LatLng) {
+         val originString = "${origin.latitude},${origin.longitude}"
+         val destinationString = "${destination.latitude},${destination.longitude}"
+
+         compositeDisposable.add(
+             iGoogleAPI.getDirections(
+                 "driving",
+                 "less_driving",
+                 originString,
+                 destinationString,
+                 getString(R.string.maps_directions_api_key)
+             )
+                 .subscribeOn(Schedulers.io())
+                 .observeOn(AndroidSchedulers.mainThread())
+                 .subscribe({ response ->
+                     val jsonObject = JSONObject(response)
+                     val routes = jsonObject.getJSONArray("routes")
+                     if (routes.length() > 0) {
+                         val overviewPolyline = routes.getJSONObject(0)
+                             .getJSONObject("overview_polyline")
+                             .getString("points")
+                         val polylineList = PolyUtil.decode(overviewPolyline)
+                         animatePolyline(polylineList)
+                     } else {
+                         Log.e("Route", "No routes found in response")
+                     }
+                 }, { throwable ->
+                     Log.e("Route", "Error fetching route: ${throwable.message}")
+                 })
+         )
+     }
+
+     private fun animatePolyline(polylineList: List<LatLng>) {
+         // Always remove the previous polyline before adding a new one
+         routePolyline?.remove()
+         routePolyline = mMap.addPolyline(
+             PolylineOptions()
+                 .color(Color.BLACK)
+                 .width(8f)
+                 .addAll(polylineList)
+         )
+     }
+
 
      private fun addMarkerWithPulseAnimation() {
          confirmPickupBinding.confirmPickupLayout.visibility = View.GONE
          binding.fillMaps.visibility = View.VISIBLE
          findingDriverBinding.findingYourRideLayout.visibility = View.VISIBLE
 
+
          originMarker = mMap.addMarker(MarkerOptions().icon(BitmapDescriptorFactory.defaultMarker())
              .position(selectedPlaceEvent!!.origin))
 
 
-         addPulsatingEffect(selectedPlaceEvent!!.origin)
+         addPulsatingEffect(selectedPlaceEvent!!)
      }
 
-     private fun addPulsatingEffect(origin: LatLng) {
+     private fun addPulsatingEffect(selectedPlaceEvent: SelectedPlaceEvent) {
          if(lastPulseAnimator != null) lastPulseAnimator!!.cancel()
-         if(lastUserCircle != null) lastUserCircle!!.center = origin
+         if(lastUserCircle != null) lastUserCircle!!.center = selectedPlaceEvent.origin
          lastPulseAnimator = Common.valueAnimate(duration, object : ValueAnimator.AnimatorUpdateListener{
              override fun onAnimationUpdate(animation: ValueAnimator) {
                  if(lastUserCircle != null) lastUserCircle!!.radius = animation!!.animatedValue.toString().toDouble() else {
                      lastUserCircle = mMap.addCircle(CircleOptions()
-                         .center(origin)
+                         .center(selectedPlaceEvent.origin)
                          .radius(animation!!.animatedValue.toString().toDouble())
                          .strokeColor(Color.WHITE)
                          .fillColor(ContextCompat.getColor(this@RequestDriverActivity, R.color.map_darker))
@@ -205,11 +546,11 @@ import org.json.JSONObject
          })
 
          // Start Rotating Camera
-         startMapCameraSpinningAnimation(mMap.cameraPosition.target)
+         startMapCameraSpinningAnimation(selectedPlaceEvent)
 
      }
 
-     private fun startMapCameraSpinningAnimation(target: LatLng) {
+     private fun startMapCameraSpinningAnimation(selectedPlaceEvent: SelectedPlaceEvent?) {
          if(animator != null) animator!!.cancel()
          animator = ValueAnimator.ofFloat(0f,(DESIRED_NUM_OF_SPINS*360).toFloat())
          animator!!.duration = (DESIRED_NUM_OF_SPINS*DESIRED_SECONDS_PER_ONE_FULL_360_SPIN*1000).toLong()
@@ -218,7 +559,7 @@ import org.json.JSONObject
          animator!!.addUpdateListener { valueAnimator ->
              val newBearingValue = valueAnimator.animatedValue as Float
              mMap.moveCamera(CameraUpdateFactory.newCameraPosition(CameraPosition.Builder()
-                 .target(target)
+                 .target(selectedPlaceEvent!!.origin)
                  .zoom(16f)
                  .tilt(45f)
                  .bearing(newBearingValue)
@@ -228,16 +569,16 @@ import org.json.JSONObject
          }
          animator!!.start()
 
-         findNearbyDriver(target)
+         findNearbyDriver(selectedPlaceEvent)
      }
 
-     private fun findNearbyDriver(target: LatLng?) {
+     private fun findNearbyDriver(selectedPlaceEvent: SelectedPlaceEvent?): DriverGeoModel? {
          if(Common.driversFound.size > 0) {
              var min = 0f
-             var foundDriver = Common.driversFound[Common.driversFound.keys.iterator().next()]   // Default found driver is the fist driver
+             var foundDriver = Common.driversFound[Common.driversFound.keys.iterator().next()]
              val currentRiderLocation = Location("")
-             currentRiderLocation.latitude = target!!.latitude
-             currentRiderLocation.longitude = target!!.longitude
+             currentRiderLocation.latitude = selectedPlaceEvent!!.origin!!.latitude
+             currentRiderLocation.longitude = selectedPlaceEvent.origin!!.longitude
 
              for(key in Common.driversFound.keys) {
                  val driverLocation = Location("")
@@ -248,24 +589,18 @@ import org.json.JSONObject
                      min = driverLocation.distanceTo(currentRiderLocation)
                      foundDriver = Common.driversFound[key]
                  }
-                 else if(driverLocation.distanceTo(currentRiderLocation) < min)
-                 {
+                 else if(driverLocation.distanceTo(currentRiderLocation) < min) {
                      min = driverLocation.distanceTo(currentRiderLocation)
                      foundDriver = Common.driversFound[key]
                  }
              }
-             //Snackbar.make(binding.mainLayout, StringBuilder("Found Driver: ").append(foundDriver!!.driverInfoModel!!.phone), Snackbar.LENGTH_LONG).show()
-
-             User_rider.sendRequestToDriver(this@RequestDriverActivity,
-                 binding.mainLayout,
-                 foundDriver,
-                 target
-             )
-         }
-         else {
+             return foundDriver
+         } else {
              Snackbar.make(binding.mainLayout, getString(R.string.drivers_not_found), Snackbar.LENGTH_LONG).show()
+             return null
          }
      }
+
 
      override fun onDestroy() {
          if(animator != null) animator!!.end()

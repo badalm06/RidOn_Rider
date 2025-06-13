@@ -7,6 +7,7 @@ import android.widget.Toast
 import com.example.uberriderremake.Model.TokenModel
 import com.example.uberriderremake.Common
 import com.example.uberriderremake.Model.DriverGeoModel
+import com.example.uberriderremake.Model.EventBus.SelectedPlaceEvent
 import com.example.uberriderremake.Model.FCMSendData
 import com.example.uberriderremake.Model.NotificationContent
 import com.example.uberriderremake.Model.NotificationRequest
@@ -60,7 +61,8 @@ data class User_rider(
             context: Context,
             mainLayout: RelativeLayout?,
             foundDriver: DriverGeoModel?,
-            target: LatLng
+            selectedPlaceEvent: SelectedPlaceEvent,
+            tripId: String
         ) {
             // Get Token
             FirebaseDatabase.getInstance()
@@ -72,8 +74,10 @@ data class User_rider(
                             val tokenModel = dataSnapshot.getValue(TokenModel::class.java)
 
                             val notificationData = mapOf(
-                                "rider_key" to FirebaseAuth.getInstance().currentUser!!.uid,
-                                "pickup_location" to "${target.latitude},${target.longitude}"
+                                "trip_id" to tripId,
+                                "pickup_location" to "${selectedPlaceEvent.origin.latitude},${selectedPlaceEvent.origin.longitude}",
+                                "rider_key" to FirebaseAuth.getInstance().currentUser!!.uid // <-- Add this line
+
                             )
 
                             val notificationContent = NotificationContent(
@@ -82,7 +86,7 @@ data class User_rider(
                             )
 
                             val request = NotificationRequest(
-                                pickup_location = PickupLocation(target.latitude, target.longitude),
+                                pickup_location = PickupLocation(selectedPlaceEvent.origin.latitude, selectedPlaceEvent.origin.longitude),
                                 notification = notificationContent,
                                 data = notificationData
                             )
