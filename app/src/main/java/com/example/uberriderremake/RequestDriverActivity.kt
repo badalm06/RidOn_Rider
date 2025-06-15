@@ -27,6 +27,7 @@ import androidx.annotation.RequiresPermission
 import com.google.firebase.database.ValueEventListener
 import androidx.cardview.widget.CardView
 import androidx.core.app.ActivityCompat
+import androidx.core.content.ContentProviderCompat.requireContext
 import androidx.core.content.ContextCompat
 import com.bumptech.glide.Glide
 import com.example.uberriderremake.Model.DriverGeoModel
@@ -110,6 +111,7 @@ import org.json.JSONObject
 
 
 
+     private var isDriverAcceptedToastShown = false
 
 
 
@@ -275,8 +277,14 @@ import org.json.JSONObject
 
                                  // Get rider origin from trip data (THIS IS THE FIX)
                                  val originString = snapshot.child("origin").getValue(String::class.java) ?: ""
+                                 val destinationString = snapshot.child("destination").getValue(String::class.java) ?: ""
                                  val riderLatLng = if (originString.isNotEmpty() && originString.contains(",")) {
                                      val parts = originString.split(",")
+                                     LatLng(parts[0].toDouble(), parts[1].toDouble())
+                                 } else null
+
+                                 val destinationLatLng = if (destinationString.isNotEmpty() && destinationString.contains(",")) {
+                                     val parts = destinationString.split(",")
                                      LatLng(parts[0].toDouble(), parts[1].toDouble())
                                  } else null
 
@@ -288,108 +296,119 @@ import org.json.JSONObject
                                  Log.d("TripRequest", "Driver location updated: $driverLatLng")
                                  Log.d("TripRequest", "Rider location updated: $riderLatLng")
 
-                                 if (lat != 0.0 && lng != 0.0 && riderLatLng != null) {
+                                 if (lat != 0.0 && lng != 0.0 && riderLatLng != null && status == "accepted") {
                                      updateDriverOnMap(driverLatLng, riderLatLng)
                                      drawRoute(driverLatLng, riderLatLng)
 
+                                     // Calculate distance to pickup
+                                     val results = FloatArray(1)
+                                     Location.distanceBetween(
+                                         driverLatLng.latitude, driverLatLng.longitude,
+                                         riderLatLng!!.latitude, riderLatLng!!.longitude,
+                                         results
+                                     )
+                                     val distanceInMeters = results[0]
+
+                                     if (distanceInMeters <= 50) {
+                                         // Optionally, also show a Toast:
+                                         Toast.makeText(this@RequestDriverActivity, "Driver Arrived", Toast.LENGTH_LONG).show()
+                                     }
+
                                  }
-                                 if (status == "accepted") {
-                                     // --- CLEANUP CODE START ---
-                                     findingDriverBinding.root.visibility = View.GONE
-                                     binding.fillMaps.visibility = View.GONE
 
-                                     lastPulseAnimator?.cancel()
-                                     lastPulseAnimator = null
+                                 if (lat != 0.0 && lng != 0.0 && destinationLatLng != null && status == "rideStarted") {
+                                     mMap.clear()
+                                     drawRoute(driverLatLng, destinationLatLng)
+                                     mMap.addMarker(MarkerOptions().position(driverLatLng).title("You"))
+                                     mMap.addMarker(MarkerOptions().position(destinationLatLng).title("Destination"))
+                                 }
 
-                                     lastUserCircle?.remove()
-                                     lastUserCircle = null
+                                 if (lat != 0.0 && lng != 0.0 && destinationLatLng != null && status == "completed") {
+                                     mMap.clear()
+                                 }
 
-                                     animator?.cancel()
-                                     animator = null
-                                     // --- CLEANUP CODE END ---
+                                 when (status) {
+                                     "accepted" -> {
+                                         // Hide finding driver and fill maps layouts
+                                         findingDriverBinding.root.visibility = View.GONE
+                                         binding.fillMaps.visibility = View.GONE
 
-                                     // Get driverId from trip node (could be "driver" or "driverId")
-                                     val driverId = snapshot.child("driverId").getValue(String::class.java)
-                                         ?: snapshot.child("driver").getValue(String::class.java) ?: ""
-                                     Log.d("TripRequest", "Driver ID: $driverId")
-                                     if (driverId.isNotEmpty()) {
-                                         val driverUsersRef =
-                                             FirebaseDatabase.getInstance().getReference("users")
-                                         driverUsersRef.child(driverId)
-                                             .addListenerForSingleValueEvent(object :
-                                                 ValueEventListener {
-                                                 override fun onDataChange(driverSnapshot: DataSnapshot) {
-                                                     val driverName = driverSnapshot.child("name")
-                                                         .getValue(String::class.java) ?: ""
-                                                     val carType = driverSnapshot.child("car")
-                                                         .getValue(String::class.java) ?: ""
-                                                     val carNumber =
-                                                         driverSnapshot.child("carNumber")
-                                                             .getValue(String::class.java) ?: ""
-                                                     val driverImgUrl =
-                                                         driverSnapshot.child("profileImageUrl")
-                                                             .getValue(String::class.java)
-                                                     val driverPhone = driverSnapshot.child("phone")
-                                                         .getValue(String::class.java) ?: ""
-                                                     Log.d(
-                                                         "TripRequest",
-                                                         "Driver info: name=$driverName, car=$carType, carNumber=$carNumber, imgUrl=$driverImgUrl"
-                                                     )
+                                         // Cancel animations and remove user circle
+                                         lastPulseAnimator?.cancel()
+                                         lastPulseAnimator = null
+                                         lastUserCircle?.remove()
+                                         lastUserCircle = null
+                                         animator?.cancel()
+                                         animator = null
 
-                                                     binding.includeDriverInfo.imgCallDriver.setOnClickListener {
-                                                         if (driverPhone.isNotEmpty()) {
-                                                             val intent = Intent(Intent.ACTION_DIAL)
-                                                             intent.data =
-                                                                 Uri.parse("tel:$driverPhone")
-                                                             startActivity(intent)
+                                         // Get driverId from trip node (could be "driver" or "driverId")
+                                         val driverId = snapshot.child("driverId").getValue(String::class.java)
+                                             ?: snapshot.child("driver").getValue(String::class.java) ?: ""
+                                         Log.d("TripRequest", "Driver ID: $driverId")
+                                         if (driverId.isNotEmpty()) {
+                                             val driverUsersRef = FirebaseDatabase.getInstance().getReference("users")
+                                             driverUsersRef.child(driverId)
+                                                 .addListenerForSingleValueEvent(object : ValueEventListener {
+                                                     override fun onDataChange(driverSnapshot: DataSnapshot) {
+                                                         val driverName = driverSnapshot.child("name").getValue(String::class.java) ?: ""
+                                                         val carType = driverSnapshot.child("car").getValue(String::class.java) ?: ""
+                                                         val carNumber = driverSnapshot.child("carNumber").getValue(String::class.java) ?: ""
+                                                         val driverImgUrl = driverSnapshot.child("profileImageUrl").getValue(String::class.java)
+                                                         val driverPhone = driverSnapshot.child("phone").getValue(String::class.java) ?: ""
+                                                         Log.d(
+                                                             "TripRequest",
+                                                             "Driver info: name=$driverName, car=$carType, carNumber=$carNumber, imgUrl=$driverImgUrl"
+                                                         )
+
+                                                         binding.includeDriverInfo.imgCallDriver.setOnClickListener {
+                                                             if (driverPhone.isNotEmpty()) {
+                                                                 val intent = Intent(Intent.ACTION_DIAL)
+                                                                 intent.data = Uri.parse("tel:$driverPhone")
+                                                                 startActivity(intent)
+                                                             }
+                                                         }
+
+                                                         // 1. Show toast
+                                                         if (!isDriverAcceptedToastShown) {
+                                                             Toast.makeText(
+                                                                 this@RequestDriverActivity,
+                                                                 "Your ride is accepted by $driverName",
+                                                                 Toast.LENGTH_LONG
+                                                             ).show()
+                                                             isDriverAcceptedToastShown = true
+                                                         }
+
+                                                         // 2. Show driver info layout (CardView)
+                                                         binding.includeDriverInfo.driverInfoLayout.visibility = View.VISIBLE
+
+                                                         // 3. Set driver info in the layout
+                                                         binding.includeDriverInfo.txtDriverName.text = driverName
+                                                         binding.includeDriverInfo.txtCarType.text = carType
+                                                         binding.includeDriverInfo.txtCarNumber.text = carNumber
+
+                                                         // 4. Load driver image (if using Glide)
+                                                         if (!driverImgUrl.isNullOrEmpty()) {
+                                                             Glide.with(this@RequestDriverActivity)
+                                                                 .load(driverImgUrl)
+                                                                 .placeholder(R.drawable.baseline_account_circle_24)
+                                                                 .error(R.drawable.baseline_account_circle_24)
+                                                                 .into(binding.includeDriverInfo.imgDriver)
+                                                         } else {
+                                                             binding.includeDriverInfo.imgDriver.setImageResource(R.drawable.baseline_account_circle_24)
                                                          }
                                                      }
-
-                                                     // 1. Show toast
-                                                     Toast.makeText(
-                                                         this@RequestDriverActivity,
-                                                         "Your ride is accepted by $driverName",
-                                                         Toast.LENGTH_LONG
-                                                     ).show()
-
-                                                     // 2. Show driver info layout (CardView)
-                                                     binding.includeDriverInfo.driverInfoLayout.visibility =
-                                                         View.VISIBLE
-
-                                                     // 3. Set driver info in the layout
-                                                     binding.includeDriverInfo.txtDriverName.text =
-                                                         driverName
-                                                     binding.includeDriverInfo.txtCarType.text =
-                                                         carType
-                                                     binding.includeDriverInfo.txtCarNumber.text =
-                                                         carNumber
-
-                                                     // 4. Load driver image (if using Glide)
-                                                     if (!driverImgUrl.isNullOrEmpty()) {
-                                                         Glide.with(this@RequestDriverActivity)
-                                                             .load(driverImgUrl)
-                                                             .placeholder(R.drawable.baseline_account_circle_24)
-                                                             .error(R.drawable.baseline_account_circle_24)
-                                                             .into(binding.includeDriverInfo.imgDriver)
-                                                     } else {
-                                                         binding.includeDriverInfo.imgDriver.setImageResource(
-                                                             R.drawable.baseline_account_circle_24
-                                                         )
+                                                     override fun onCancelled(error: DatabaseError) {
+                                                         Log.e("TripRequest", "Failed to fetch driver info: ${error.message}")
                                                      }
-                                                 }
-                                                 override fun onCancelled(error: DatabaseError) {
-                                                     Log.e(
-                                                         "TripRequest",
-                                                         "Failed to fetch driver info: ${error.message}"
-                                                     )
-                                                 }
-                                             })
-
-
+                                                 })
+                                         }
                                      }
-                                 } else {
-                                     Log.d("TripRequest", "Status is not accepted: $status")
+//
                                  }
+
+//                                 else {
+//                                     Log.d("TripRequest", "Status is not accepted: $status")
+//                                 }
                              }
                              override fun onCancelled(error: DatabaseError) {
                                  Log.e("TripRequest", "Trip listener cancelled: ${error.message}")
@@ -402,7 +421,7 @@ import org.json.JSONObject
                              tripRef.get().addOnSuccessListener { snapshot ->
                                  val status = snapshot.child("status").getValue(String::class.java)
                                  Log.d("TripRequest", "Timeout check, trip status: $status")
-                                 if (status != "accepted") {
+                                 if (status != "accepted" && status != "rideStarted" && status != "completed") {
                                      lastPulseAnimator?.cancel()
                                      lastPulseAnimator = null
 

@@ -76,6 +76,7 @@ data class User_rider(
                             val notificationData = mapOf(
                                 "trip_id" to tripId,
                                 "pickup_location" to "${selectedPlaceEvent.origin.latitude},${selectedPlaceEvent.origin.longitude}",
+                                "destination_location" to "${selectedPlaceEvent.destination.latitude},${selectedPlaceEvent.destination.longitude}",
                                 "rider_key" to FirebaseAuth.getInstance().currentUser!!.uid // <-- Add this line
 
                             )
@@ -124,74 +125,3 @@ data class User_rider(
         }
     }
 }
-
-
-
-
-//        fun sendRequestToDriver(
-//            context: Context,
-//            mainLayout: RelativeLayout?,
-//            foundDriver: DriverGeoModel?,
-//            target: LatLng
-//        ) {
-//            val compositeDisposable = CompositeDisposable()
-//            val ifcmService = RetrofitFCMClient.instance!!.create(IFCMService::class.java)
-//
-//            // Get Token
-//            FirebaseDatabase.getInstance()
-//                .getReference(Common.TOKEN_REFERENCE)
-//                .child(foundDriver!!.key!!)
-//                .addListenerForSingleValueEvent(object : ValueEventListener {
-//                    override fun onDataChange(dataSnapshot: DataSnapshot) {
-//                        if(dataSnapshot.exists()) {
-//                            val tokenModel = dataSnapshot.getValue(TokenModel::class.java)
-//                            Log.d("FCM_DEBUG", "Fetched Token: ${tokenModel?.token}")
-//
-//
-//                            val notificationData: MutableMap<String, String> = HashMap()
-//                            notificationData.put(Common.NOTI_TITLE, Common.REQUEST_DRIVER_TITLE)
-//                            notificationData.put(Common.NOTI_BODY, "This message represent for Request Driver Action")
-//                            notificationData.put(Common.RIDER_KEY, FirebaseAuth.getInstance().currentUser!!.uid)
-//                            notificationData.put(Common.PICKUP_LOCATION, StringBuilder()
-//                                .append(target.latitude)
-//                                .append(",")
-//                                .append(target.longitude)
-//                                .toString()
-//                            )
-//
-//                            val fcmSendData = FCMSendData(tokenModel!!.token, notificationData)
-//                            Log.d("FCM_DEBUG", "Sending payload: $fcmSendData")
-//
-//                            compositeDisposable.add(ifcmService.sendNotification(fcmSendData)!!
-//                                .subscribeOn(Schedulers.newThread())
-//                                .observeOn(AndroidSchedulers.mainThread())
-//                                .subscribe ({ fcmResponse ->
-//                                    Log.d("FCM_DEBUG", "FCM Response: $fcmResponse")
-//                                    if(fcmResponse!!.success == 0) {
-//                                        compositeDisposable.clear()
-//                                        Snackbar.make(mainLayout!!,context.getString(R.string.send_request_driver_failed), Snackbar.LENGTH_LONG).show()
-//
-//                                    }
-//
-//                                },{ t: Throwable? ->
-//                                    Log.e("FCM_ERROR", "Throwable error: ${t?.message}")
-//
-//                                    compositeDisposable.clear()
-//                                    Snackbar.make(mainLayout!!,t!!.message!!, Snackbar.LENGTH_LONG).show()
-//
-//                                }))
-//
-//
-//                        }
-//                        else {
-//                            Snackbar.make(mainLayout!!,context.getString(R.string.token_not_found), Snackbar.LENGTH_LONG).show()
-//                        }
-//                    }
-//
-//                    override fun onCancelled(databaseError: DatabaseError) {
-//                        Snackbar.make(mainLayout!!, databaseError.message, Snackbar.LENGTH_LONG).show()
-//                    }
-//
-//                })
-//
-//        }
