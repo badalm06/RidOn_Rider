@@ -41,6 +41,7 @@ import com.google.android.gms.maps.SupportMapFragment
 import com.google.android.gms.maps.model.LatLng
 import com.google.android.gms.maps.model.MarkerOptions
 import com.example.uberriderremake.databinding.ActivityRequestDriverBinding
+import com.example.uberriderremake.databinding.FragmentHomeBinding
 import com.example.uberriderremake.databinding.LayoutConfirmPickupBinding
 import com.example.uberriderremake.databinding.LayoutConfirmUberBinding
 import com.example.uberriderremake.databinding.LayoutDriverInfoBinding
@@ -103,6 +104,8 @@ import org.json.JSONObject
      internal lateinit var originInfoBinding: OriginInfoWindowsBinding
      private lateinit var findingDriverBinding: LayoutFindingYourDriverBinding
      private lateinit var driverInfoBinding: LayoutDriverInfoBinding
+
+     private lateinit var fragmentHomeBinding: FragmentHomeBinding
 
 
      private var driverMarker: Marker? = null
@@ -325,6 +328,8 @@ import org.json.JSONObject
 
                                  if (lat != 0.0 && lng != 0.0 && destinationLatLng != null && status == "completed") {
                                      mMap.clear()
+                                     driverInfoBinding.root.visibility = View.GONE
+                                     fragmentHomeBinding.root.visibility = View.VISIBLE
                                  }
 
                                  when (status) {

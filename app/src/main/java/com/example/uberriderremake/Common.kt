@@ -35,38 +35,91 @@ object Common {
     }
 
     fun showNotification(context: Context, id: Int, title: String?, body: String?, intent: Intent?) {
-        var pendingIntent: PendingIntent? = null
-        if(intent != null) {
-            pendingIntent = PendingIntent.getActivity(context, id, intent!!, PendingIntent.FLAG_UPDATE_CURRENT)
-            val NOTIFICATION_CHANNEL_ID = "Uber_Remake"
-            val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-            if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                val notificationChannel = NotificationChannel(NOTIFICATION_CHANNEL_ID, "Uber Remake",
-                    NotificationManager.IMPORTANCE_HIGH)
-                notificationChannel.description = "Uber_Remake"
-                notificationChannel.enableLights(true)
-                notificationChannel.lightColor = Color.RED
-                notificationChannel.vibrationPattern = longArrayOf(0, 1000, 500, 1000)
-                notificationChannel.enableVibration(true)
-
-                notificationManager.createNotificationChannel(notificationChannel)
-            }
-            val builder = NotificationCompat.Builder(context, NOTIFICATION_CHANNEL_ID)
-            builder.setContentTitle(title)
-                .setContentText(body)
-                .setAutoCancel(false)
-                .setPriority(NotificationCompat.PRIORITY_HIGH)
-                .setDefaults(Notification.DEFAULT_VIBRATE)
-                .setSmallIcon(R.drawable.baseline_directions_car_24)
-                .setLargeIcon(BitmapFactory.decodeResource(context.resources, R.drawable.baseline_directions_car_24))
-
-            if(pendingIntent != null) {
-                builder.setContentIntent(pendingIntent!!)
-                val notification = builder.build()
-                notificationManager.notify(id, notification)
-            }
+        val pendingIntent = if (intent != null) {
+            PendingIntent.getActivity(
+                context,
+                id,
+                intent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+        } else {
+            null
         }
+
+        val NOTIFICATION_CHANNEL_ID = "Uber_Remake"
+        val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val notificationChannel = NotificationChannel(
+                NOTIFICATION_CHANNEL_ID,
+                "Uber Remake",
+                NotificationManager.IMPORTANCE_HIGH
+            )
+            notificationChannel.description = "Uber_Remake"
+            notificationChannel.enableLights(true)
+            notificationChannel.lightColor = Color.RED
+            notificationChannel.vibrationPattern = longArrayOf(0, 1000, 500, 1000)
+            notificationChannel.enableVibration(true)
+            notificationManager.createNotificationChannel(notificationChannel)
+        }
+
+        val notificationBuilder = NotificationCompat.Builder(context, NOTIFICATION_CHANNEL_ID)
+            .setSmallIcon(R.drawable.baseline_directions_car_24) // Replace with your icon
+            .setContentTitle(title ?: "Title")
+            .setContentText(body ?: "Body")
+            .setAutoCancel(true)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setVibrate(longArrayOf(0, 1000, 500, 1000))
+            .setLights(Color.RED, 1000, 1000)
+
+        if (pendingIntent != null) {
+            notificationBuilder.setContentIntent(pendingIntent)
+        }
+
+        notificationManager.notify(id, notificationBuilder.build())
     }
+
+
+//    fun showNotification(context: Context, id: Int, title: String?, body: String?, intent: Intent?) {
+//        val pendingIntent = if (intent != null) {
+//            PendingIntent.getActivity(
+//                context,
+//                id,
+//                intent,
+//                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+//            )
+//        } else {
+//            null
+//        }
+//            val NOTIFICATION_CHANNEL_ID = "Uber_Remake"
+//            val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+//            if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+//                val notificationChannel = NotificationChannel(NOTIFICATION_CHANNEL_ID, "Uber Remake",
+//                    NotificationManager.IMPORTANCE_HIGH)
+//                notificationChannel.description = "Uber_Remake"
+//                notificationChannel.enableLights(true)
+//                notificationChannel.lightColor = Color.RED
+//                notificationChannel.vibrationPattern = longArrayOf(0, 1000, 500, 1000)
+//                notificationChannel.enableVibration(true)
+//
+//                notificationManager.createNotificationChannel(notificationChannel)
+//            }
+//            val builder = NotificationCompat.Builder(context, NOTIFICATION_CHANNEL_ID)
+//            builder.setContentTitle(title)
+//                .setContentText(body)
+//                .setAutoCancel(false)
+//                .setPriority(NotificationCompat.PRIORITY_HIGH)
+//                .setDefaults(Notification.DEFAULT_VIBRATE)
+//                .setSmallIcon(R.drawable.baseline_directions_car_24)
+//                .setLargeIcon(BitmapFactory.decodeResource(context.resources, R.drawable.baseline_directions_car_24))
+//
+//            if(pendingIntent != null) {
+//                builder.setContentIntent(pendingIntent!!)
+//                val notification = builder.build()
+//                notificationManager.notify(id, notification)
+//            }
+//        }
+
 
     fun buildName(firstName: String?, lastName: String?): String? {
         return java.lang.StringBuilder(firstName!!).append(" ").append(lastName).toString()

@@ -17,15 +17,33 @@ class MyFirebaseMessagingService: FirebaseMessagingService() {
         }
     }
 
-        override fun onMessageReceived(remoteMessage: RemoteMessage) {
-            super.onMessageReceived(remoteMessage)
+    override fun onMessageReceived(remoteMessage: RemoteMessage) {
+        super.onMessageReceived(remoteMessage)
 
-            val title = remoteMessage.data[Common.NOTI_TITLE]
-            val body = remoteMessage.data[Common.NOTI_BODY]
+        val title = remoteMessage.notification?.title
+        val body = remoteMessage.notification?.body
 
-            val intent = Intent(this, SplashScreen::class.java)
-            intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
+        Log.d("Notification", "Title: $title, Body: $body")
 
-            Common.showNotification(this, 0, title, body, intent)
+        // Default intent: open SplashScreen
+        var intent = Intent(this, SplashScreen::class.java)
+        intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
+
+        // "Driver Arrived" notification
+        if (title == "Driver Arrived") {
+            // intent = Intent(this, RideActivity::class.java)
+            // intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
         }
+
+        // "Trip Completed" notification
+        if (title == "Trip Completed") {
+            // Example: Open RideHistoryActivity
+            // intent = Intent(this, RideHistoryActivity::class.java)
+            // intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
+        }
+
+        // Show the notification
+        Common.showNotification(this, 0, title, body, intent)
     }
+
+}
