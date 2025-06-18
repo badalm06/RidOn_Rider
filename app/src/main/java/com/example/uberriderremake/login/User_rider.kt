@@ -8,14 +8,11 @@ import com.example.uberriderremake.Model.TokenModel
 import com.example.uberriderremake.Common
 import com.example.uberriderremake.Model.DriverGeoModel
 import com.example.uberriderremake.Model.EventBus.SelectedPlaceEvent
-import com.example.uberriderremake.Model.FCMSendData
 import com.example.uberriderremake.Model.NotificationContent
 import com.example.uberriderremake.Model.NotificationRequest
 import com.example.uberriderremake.Model.NotificationResponse
 import com.example.uberriderremake.Model.PickupLocation
 import com.example.uberriderremake.R
-import com.example.uberriderremake.Remote.IFCMService
-import com.example.uberriderremake.Remote.RetrofitFCMClient
 import com.example.uberriderremake.Services.BackendService
 import com.google.android.gms.maps.model.LatLng
 import com.google.android.material.snackbar.Snackbar

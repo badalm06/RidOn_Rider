@@ -16,6 +16,7 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
+import android.util.Log.e
 import android.view.View
 import android.view.animation.LinearInterpolator
 import android.widget.ImageView
@@ -46,6 +47,7 @@ import com.example.uberriderremake.databinding.LayoutConfirmPickupBinding
 import com.example.uberriderremake.databinding.LayoutConfirmUberBinding
 import com.example.uberriderremake.databinding.LayoutDriverInfoBinding
 import com.example.uberriderremake.databinding.LayoutFindingYourDriverBinding
+import com.example.uberriderremake.databinding.LayoutTripSummaryBinding
 import com.example.uberriderremake.databinding.OriginInfoWindowsBinding
 import com.example.uberriderremake.login.User_rider
 import com.firebase.ui.auth.data.model.User
@@ -78,6 +80,9 @@ import org.greenrobot.eventbus.EventBus
 import org.greenrobot.eventbus.Subscribe
 import org.greenrobot.eventbus.ThreadMode
 import org.json.JSONObject
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 
  class RequestDriverActivity : AppCompatActivity(), OnMapReadyCallback {
@@ -104,6 +109,7 @@ import org.json.JSONObject
      internal lateinit var originInfoBinding: OriginInfoWindowsBinding
      private lateinit var findingDriverBinding: LayoutFindingYourDriverBinding
      private lateinit var driverInfoBinding: LayoutDriverInfoBinding
+     private lateinit var tripSummaryBinding: LayoutTripSummaryBinding
 
      private lateinit var fragmentHomeBinding: FragmentHomeBinding
 
@@ -171,6 +177,7 @@ import org.json.JSONObject
         originInfoBinding = OriginInfoWindowsBinding.bind(originInfoWindowView)
         findingDriverBinding = LayoutFindingYourDriverBinding.bind(binding.includeFindingYourDriver.root)
         driverInfoBinding = LayoutDriverInfoBinding.bind(binding.includeDriverInfo.root)
+        tripSummaryBinding = LayoutTripSummaryBinding.bind(binding.includeTripSummary.root)
 
         mainLayout = findViewById(R.id.main_layout)
 
@@ -240,6 +247,7 @@ import org.json.JSONObject
                      }
                  }
 
+                 val currentDateAndTime = SimpleDateFormat("dd/MM/yyyy HH:mm:ss", Locale.getDefault()).format(Date())
 
                  // 3. Prepare trip data with all fields matching your screenshot
                  val tripData = mapOf(
@@ -254,8 +262,9 @@ import org.json.JSONObject
                      "origin" to "${selectedPlaceEvent!!.origin.latitude},${selectedPlaceEvent!!.origin.longitude}",
                      "originString" to "${selectedPlaceEvent!!.origin.latitude},${selectedPlaceEvent!!.origin.longitude}",
                      "rider" to FirebaseAuth.getInstance().currentUser!!.uid,
-                     "durationPickup" to "0 min" // Will be updated by driver
-                 )
+                     "durationPickup" to "0 min",
+                     "tripStartTime" to currentDateAndTime
+                     )
 
                  // 4. Add the trip entry to Firebase
                  tripsRef.child(tripId).setValue(tripData)
@@ -326,11 +335,48 @@ import org.json.JSONObject
                                      mMap.addMarker(MarkerOptions().position(destinationLatLng).title("Destination"))
                                  }
 
-                                 if (lat != 0.0 && lng != 0.0 && destinationLatLng != null && status == "completed") {
-                                     mMap.clear()
-                                     driverInfoBinding.root.visibility = View.GONE
-                                     fragmentHomeBinding.root.visibility = View.VISIBLE
-                                 }
+                                 // In your activity/fragment (e.g., after setting status to "completed")
+                                 val tripsRef = FirebaseDatabase.getInstance().getReference("Trips")
+                                 val historyRef = FirebaseDatabase.getInstance().getReference("History")
+
+                                // Listen for status changes on the current trip
+                                 tripsRef.child(tripId).child("status").addValueEventListener(object : ValueEventListener {
+                                     override fun onDataChange(snapshot: DataSnapshot) {
+                                         val status = snapshot.getValue(String::class.java)
+                                         Log.d("TripStatusListener", "Status changed: $status")
+                                         if (status == "completed") {
+                                             Log.d("TripStatusListener", "Trip completed, moving to history...")
+                                             tripsRef.child(tripId).get().addOnSuccessListener { tripSnapshot ->
+                                                 Log.d("TripStatusListener", "Trip data fetched, data: ${tripSnapshot.value}")
+                                                 historyRef.child(tripId).setValue(tripSnapshot.value)
+                                                     .addOnSuccessListener {
+                                                         Log.d("TripStatusListener", "Trip moved to history successfully")
+                                                         tripsRef.child(tripId).removeValue()
+                                                             .addOnSuccessListener {
+                                                                 Log.d("TripStatusListener", "Trip removed from active trips")
+                                                                // if (lat != 0.0 && lng != 0.0 && destinationLatLng != null) {
+                                                                     mMap.clear()
+                                                                     driverInfoBinding.root.visibility = View.GONE
+                                                                     tripSummaryBinding.root.visibility = View.VISIBLE
+                                                                     tripSummaryBinding.btnCompleteTrip.setOnClickListener {
+                                                                         fragmentHomeBinding.root.visibility = View.VISIBLE
+                                                                     }
+                                                                 //}
+                                                             }
+                                                     }
+                                                     .addOnFailureListener { e ->
+                                                         Log.e("TripStatusListener", "Failed to move trip to history: ${e.message}")
+                                                     }
+                                             }
+                                                 .addOnFailureListener { e ->
+                                                     Log.e("TripStatusListener", "Failed to fetch trip data: ${e.message}")
+                                                 }
+                                         }
+                                     }
+                                     override fun onCancelled(error: DatabaseError) {
+                                         Log.e("TripStatusListener", "Listener cancelled: ${error.message}")
+                                     }
+                                 })
 
                                  when (status) {
                                      "accepted" -> {
@@ -440,6 +486,9 @@ import org.json.JSONObject
                                      // Optionally, hide the searching animation/layout
                                      findingDriverBinding.root.visibility = View.GONE
                                      binding.fillMaps.visibility = View.GONE
+                                     mMap.clear()
+                                     fragmentHomeBinding.root.visibility = View.VISIBLE
+
                                  }
                              }
                          }, 30000) // 30 seconds
@@ -809,10 +858,26 @@ import org.json.JSONObject
                      val objects = jsonArray.getJSONObject(0)
                      val legs = objects.getJSONArray("legs")
                      val legsObject = legs.getJSONObject(0)
+
                      val time = legsObject.getJSONObject("duration")
                      val duration = time.getString("text")
+                     val distance = legsObject.getJSONObject("distance")
+                     val distanceText = distance.getString("text")
+                     val distanceValue = distanceText.replace(" km", "").toDouble()
+                     val price = distanceValue * 10        // ₹10 per km
+
+
                      val start_address = legsObject.getString("start_address")
                      val end_address = legsObject.getString("end_address")
+
+                     // Set value for Distance and Fare price
+                     confirmUberBinding.txtDistance.setText(distanceText)
+                     confirmUberBinding.txtFare.setText("₹${"%.2f".format(price)}")
+                     tripSummaryBinding.txtStartAddress.setText(start_address)
+                     tripSummaryBinding.txtEndAddress.setText(end_address)
+                     tripSummaryBinding.txtTripDuration.text = "Duration: $duration"
+                     tripSummaryBinding.txtTripDistance.text = "Distance: $distanceText"
+                     tripSummaryBinding.txtTripCharges.text = "Charges: ₹${"%.2f".format(price)}"
 
                      addOriginMarker(duration, start_address)
 

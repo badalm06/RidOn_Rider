@@ -282,9 +282,6 @@ class HomeFragment : Fragment(), OnMapReadyCallback, FirebaseDriverInfoListener 
             iGoogleAPI = RetrofitClient.instance!!.create(IGoogleAPI::class.java)
 
 
-
-            //      iFirebaseDriverInfoListener = this
-
             onlineRef = FirebaseDatabase.getInstance().getReference().child(".info/connected")
             riderLocationRef = FirebaseDatabase.getInstance().getReference(Common.RIDER_LOCATION_REFERENCE)
             currentUserRef = FirebaseDatabase.getInstance().getReference(Common.RIDER_LOCATION_REFERENCE).child(

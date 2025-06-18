@@ -45,7 +45,72 @@
 
         </LinearLayout>
 
-    <LinearLayout
+            <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:clickable="true"
+            android:foreground="?attr/selectableItemBackground"
+            android:orientation="horizontal"
+            android:paddingLeft="@dimen/activity_margin"
+            android:paddingTop="8dp"
+            android:paddingRight="@dimen/activity_margin"
+            android:paddingBottom="8dp">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center_vertical"
+                android:text="@string/distance"
+                android:textColor="#737373"
+                android:textSize="18sp"/>
+
+            <TextView
+                android:id="@+id/txt_distance"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginLeft="4dp"
+                android:layout_gravity="center_vertical"
+                android:textStyle="bold"
+                android:text="10 km"
+                android:textColor="#737373"
+                android:textSize="18sp"/>
+
+        </LinearLayout>
+
+            <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:clickable="true"
+            android:foreground="?attr/selectableItemBackground"
+            android:orientation="horizontal"
+            android:paddingLeft="@dimen/activity_margin"
+            android:paddingTop="8dp"
+            android:paddingRight="@dimen/activity_margin"
+            android:paddingBottom="8dp">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center_vertical"
+                android:text="@string/charges"
+                android:textColor="#737373"
+                android:textSize="18sp"/>
+
+            <TextView
+                android:id="@+id/txt_fare"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginLeft="4dp"
+                android:layout_gravity="center_vertical"
+                android:textStyle="bold"
+                android:text="₹50"
+                android:textColor="#737373"
+                android:textSize="18sp"/>
+
+        </LinearLayout>
+
+
+        <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:clickable="true"
@@ -70,5 +135,6 @@
     </LinearLayout>
 
     </LinearLayout>
+
 
 </androidx.cardview.widget.CardView>

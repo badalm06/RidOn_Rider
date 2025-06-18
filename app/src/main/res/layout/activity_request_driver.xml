@@ -54,6 +54,10 @@
             android:id="@+id/include_driver_info"
             layout="@layout/layout_driver_info"/>
 
+        <include
+            android:id="@+id/include_trip_summary"
+            layout="@layout/layout_trip_summary"/>
+
 
     </FrameLayout>
 
