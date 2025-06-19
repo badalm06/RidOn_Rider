@@ -40,5 +40,6 @@
     <string name="distance">Distance =</string>
     <string name="charges">Fare =</string>
     <string name="okay">Okay</string>
+    <string name="menu_history">History</string>
 
 </resources>

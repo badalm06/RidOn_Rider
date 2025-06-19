@@ -118,7 +118,7 @@ import java.util.Locale
      private var routePolyline: Polyline? = null
      private var riderMarker: Marker? = null
 
-
+     private var tripId: String? = null
 
      private var isDriverAcceptedToastShown = false
 
@@ -202,312 +202,270 @@ import java.util.Locale
      private fun init() {
          iGoogleAPI = RetrofitClient.instance!!.create(IGoogleAPI::class.java)
 
-         // Event
          confirmUberBinding.btnConfirmUber.setOnClickListener {
              confirmPickupBinding.confirmPickupLayout.visibility = View.VISIBLE
              confirmUberBinding.confirmUberLayout.visibility = View.GONE
-
-
              setDataPickup()
          }
 
          confirmPickupBinding.btnConfirmPickup.setOnClickListener {
-             if(mMap == null) return@setOnClickListener
-             if(selectedPlaceEvent == null) return@setOnClickListener
+             if (mMap == null) return@setOnClickListener
+             if (selectedPlaceEvent == null) return@setOnClickListener
 
-             // Clear map
              mMap.clear()
 
-             // Tilt
              val cameraPos = CameraPosition.Builder().target(selectedPlaceEvent!!.origin)
                  .tilt(45f)
                  .zoom(16f)
                  .build()
              mMap.moveCamera(CameraUpdateFactory.newCameraPosition(cameraPos))
-
-             // Start Animation
              addMarkerWithPulseAnimation()
 
              val foundDriver = findNearbyDriver(selectedPlaceEvent)
              if (foundDriver != null) {
-                 // 1. Get reference to "Trips" node (changed from "Rides")
                  val tripsRef = FirebaseDatabase.getInstance().getReference("Trips")
-
-                 // 2. Generate a unique trip ID
-                 val tripId = tripsRef.push().key ?: return@setOnClickListener
+                 tripId = tripsRef.push().key ?: return@setOnClickListener
 
                  val locationCallback = object : LocationCallback() {
                      override fun onLocationResult(locationResult: LocationResult) {
                          val location = locationResult.lastLocation
                          if (location != null) {
                              Log.d("DriverLocation", "Got location: ${location.latitude}, ${location.longitude}")
-                             tripsRef.child("currentLat").setValue(location.latitude)
-                             tripsRef.child("currentLng").setValue(location.longitude)
+                             tripsRef.child(tripId!!).child("currentLat").setValue(location.latitude)
+                             tripsRef.child(tripId!!).child("currentLng").setValue(location.longitude)
                          }
                      }
                  }
 
                  val currentDateAndTime = SimpleDateFormat("dd/MM/yyyy HH:mm:ss", Locale.getDefault()).format(Date())
+                 val usersRef = FirebaseDatabase.getInstance().getReference("rider_users")
+                 usersRef.child(FirebaseAuth.getInstance().currentUser!!.uid)
+                     .addListenerForSingleValueEvent(object : ValueEventListener {
+                         override fun onDataChange(snapshot: DataSnapshot) {
+                             val user = snapshot.getValue(User_rider::class.java)
+                             Common.currentUser = user
+                             val riderName = Common.currentUser?.name ?: "Unknown"
 
-                 // 3. Prepare trip data with all fields matching your screenshot
-                 val tripData = mapOf(
-                     "cancel" to false,
-                     "currentLat" to 0.0,
-                     "currentLng" to 0.0,
-                     "destination" to "${selectedPlaceEvent!!.destination.latitude},${selectedPlaceEvent!!.destination.longitude}",
-                     "destinationString" to "${selectedPlaceEvent!!.destination.latitude},${selectedPlaceEvent!!.destination.longitude}",
-                     "distancePickup" to "0.0 mi", // Will be updated by driver
-                     "done" to false,
-                     "driver" to "", // Empty until driver accepts
-                     "origin" to "${selectedPlaceEvent!!.origin.latitude},${selectedPlaceEvent!!.origin.longitude}",
-                     "originString" to "${selectedPlaceEvent!!.origin.latitude},${selectedPlaceEvent!!.origin.longitude}",
-                     "rider" to FirebaseAuth.getInstance().currentUser!!.uid,
-                     "durationPickup" to "0 min",
-                     "tripStartTime" to currentDateAndTime
-                     )
+                             val tripData = mapOf(
+                                 "cancel" to false,
+                                 "currentLat" to 0.0,
+                                 "currentLng" to 0.0,
+                                 "destination" to "${selectedPlaceEvent!!.destination.latitude},${selectedPlaceEvent!!.destination.longitude}",
+                                 "destinationString" to "${selectedPlaceEvent!!.destination.latitude},${selectedPlaceEvent!!.destination.longitude}",
+                                 "done" to false,
+                                 "origin" to "${selectedPlaceEvent!!.origin.latitude},${selectedPlaceEvent!!.origin.longitude}",
+                                 "originString" to "${selectedPlaceEvent!!.origin.latitude},${selectedPlaceEvent!!.origin.longitude}",
+                                 "rider" to FirebaseAuth.getInstance().currentUser!!.uid,
+                                 "riderName" to riderName,
+                                 "tripStartTime" to currentDateAndTime,
+                                 "start_address" to "",
+                                 "end_address" to "",
+                                 "distanceText" to "",
+                                 "duration" to "",
+                                 "price" to 0.0
+                             )
 
-                 // 4. Add the trip entry to Firebase
-                 tripsRef.child(tripId).setValue(tripData)
-                     .addOnSuccessListener {
-                         Log.d("TripRequest", "Trip requested successfully!")
-                         Toast.makeText(this, "Trip requested successfully!", Toast.LENGTH_SHORT).show()
+                             tripsRef.child(tripId!!).setValue(tripData)
+                                 .addOnSuccessListener {
+                                     Log.d("TripRequest", "Trip requested successfully!")
+                                     Toast.makeText(this@RequestDriverActivity, "Trip requested successfully!", Toast.LENGTH_SHORT).show()
+                                     drawPath(selectedPlaceEvent!!)
 
-                         // Send notification to driver
-                         User_rider.sendRequestToDriver(
-                             context = this,
-                             mainLayout = mainLayout,
-                             foundDriver = foundDriver,
-                             selectedPlaceEvent = selectedPlaceEvent!!,
-                             tripId = tripId
-                         )
-
-                         val tripRef = FirebaseDatabase.getInstance().getReference("Trips").child(tripId)
-                         tripRef.addValueEventListener(object : ValueEventListener {
-                             override fun onDataChange(snapshot: DataSnapshot) {
-                                 val status = snapshot.child("status").getValue(String::class.java)
-                                 Log.d("TripRequest", "Trip status changed: $status")
-
-                                 // Get rider origin from trip data (THIS IS THE FIX)
-                                 val originString = snapshot.child("origin").getValue(String::class.java) ?: ""
-                                 val destinationString = snapshot.child("destination").getValue(String::class.java) ?: ""
-                                 val riderLatLng = if (originString.isNotEmpty() && originString.contains(",")) {
-                                     val parts = originString.split(",")
-                                     LatLng(parts[0].toDouble(), parts[1].toDouble())
-                                 } else null
-
-                                 val destinationLatLng = if (destinationString.isNotEmpty() && destinationString.contains(",")) {
-                                     val parts = destinationString.split(",")
-                                     LatLng(parts[0].toDouble(), parts[1].toDouble())
-                                 } else null
-
-                                 val lat = snapshot.child("driverLocation").child("lat").getValue(Double::class.java) ?: 0.0
-                                 val lng = snapshot.child("driverLocation").child("lng").getValue(Double::class.java) ?: 0.0
-                                 val driverLatLng = LatLng(lat, lng)
-
-
-                                 Log.d("TripRequest", "Driver location updated: $driverLatLng")
-                                 Log.d("TripRequest", "Rider location updated: $riderLatLng")
-
-                                 if (lat != 0.0 && lng != 0.0 && riderLatLng != null && status == "accepted") {
-                                     updateDriverOnMap(driverLatLng, riderLatLng)
-                                     drawRoute(driverLatLng, riderLatLng)
-
-                                     // Calculate distance to pickup
-                                     val results = FloatArray(1)
-                                     Location.distanceBetween(
-                                         driverLatLng.latitude, driverLatLng.longitude,
-                                         riderLatLng!!.latitude, riderLatLng!!.longitude,
-                                         results
+                                     User_rider.sendRequestToDriver(
+                                         context = this@RequestDriverActivity,
+                                         mainLayout = mainLayout,
+                                         foundDriver = foundDriver,
+                                         selectedPlaceEvent = selectedPlaceEvent!!,
+                                         tripId = tripId!!
                                      )
-                                     val distanceInMeters = results[0]
 
-                                     if (distanceInMeters <= 50) {
-                                         // Optionally, also show a Toast:
-                                         Toast.makeText(this@RequestDriverActivity, "Driver Arrived", Toast.LENGTH_LONG).show()
-                                     }
+                                     val tripRef = FirebaseDatabase.getInstance().getReference("Trips").child(tripId!!)
+                                     tripRef.addValueEventListener(object : ValueEventListener {
+                                         override fun onDataChange(snapshot: DataSnapshot) {
+                                             val status = snapshot.child("status").getValue(String::class.java)
+                                             Log.d("TripRequest", "Trip status changed: $status")
 
-                                 }
+                                             val originString = snapshot.child("origin").getValue(String::class.java) ?: ""
+                                             val destinationString = snapshot.child("destination").getValue(String::class.java) ?: ""
+                                             val riderLatLng = if (originString.isNotEmpty() && originString.contains(",")) {
+                                                 val parts = originString.split(",")
+                                                 LatLng(parts[0].toDouble(), parts[1].toDouble())
+                                             } else null
 
-                                 if (lat != 0.0 && lng != 0.0 && destinationLatLng != null && status == "rideStarted") {
-                                     mMap.clear()
-                                     drawRoute(driverLatLng, destinationLatLng)
-                                     mMap.addMarker(MarkerOptions().position(driverLatLng).title("You"))
-                                     mMap.addMarker(MarkerOptions().position(destinationLatLng).title("Destination"))
-                                 }
+                                             val destinationLatLng = if (destinationString.isNotEmpty() && destinationString.contains(",")) {
+                                                 val parts = destinationString.split(",")
+                                                 LatLng(parts[0].toDouble(), parts[1].toDouble())
+                                             } else null
 
-                                 // In your activity/fragment (e.g., after setting status to "completed")
-                                 val tripsRef = FirebaseDatabase.getInstance().getReference("Trips")
-                                 val historyRef = FirebaseDatabase.getInstance().getReference("History")
+                                             val lat = snapshot.child("driverLocation").child("lat").getValue(Double::class.java) ?: 0.0
+                                             val lng = snapshot.child("driverLocation").child("lng").getValue(Double::class.java) ?: 0.0
+                                             val driverLatLng = LatLng(lat, lng)
 
-                                // Listen for status changes on the current trip
-                                 tripsRef.child(tripId).child("status").addValueEventListener(object : ValueEventListener {
-                                     override fun onDataChange(snapshot: DataSnapshot) {
-                                         val status = snapshot.getValue(String::class.java)
-                                         Log.d("TripStatusListener", "Status changed: $status")
-                                         if (status == "completed") {
-                                             Log.d("TripStatusListener", "Trip completed, moving to history...")
-                                             tripsRef.child(tripId).get().addOnSuccessListener { tripSnapshot ->
-                                                 Log.d("TripStatusListener", "Trip data fetched, data: ${tripSnapshot.value}")
-                                                 historyRef.child(tripId).setValue(tripSnapshot.value)
-                                                     .addOnSuccessListener {
-                                                         Log.d("TripStatusListener", "Trip moved to history successfully")
-                                                         tripsRef.child(tripId).removeValue()
-                                                             .addOnSuccessListener {
-                                                                 Log.d("TripStatusListener", "Trip removed from active trips")
-                                                                // if (lat != 0.0 && lng != 0.0 && destinationLatLng != null) {
-                                                                     mMap.clear()
-                                                                     driverInfoBinding.root.visibility = View.GONE
-                                                                     tripSummaryBinding.root.visibility = View.VISIBLE
-                                                                     tripSummaryBinding.btnCompleteTrip.setOnClickListener {
-                                                                         fragmentHomeBinding.root.visibility = View.VISIBLE
-                                                                     }
-                                                                 //}
-                                                             }
-                                                     }
-                                                     .addOnFailureListener { e ->
-                                                         Log.e("TripStatusListener", "Failed to move trip to history: ${e.message}")
-                                                     }
-                                             }
-                                                 .addOnFailureListener { e ->
-                                                     Log.e("TripStatusListener", "Failed to fetch trip data: ${e.message}")
+                                             Log.d("TripRequest", "Driver location updated: $driverLatLng")
+                                             Log.d("TripRequest", "Rider location updated: $riderLatLng")
+
+                                             if (lat != 0.0 && lng != 0.0 && riderLatLng != null && status == "accepted") {
+                                                 updateDriverOnMap(driverLatLng, riderLatLng)
+                                                 drawRoute(driverLatLng, riderLatLng)
+                                                 val results = FloatArray(1)
+                                                 Location.distanceBetween(
+                                                     driverLatLng.latitude, driverLatLng.longitude,
+                                                     riderLatLng.latitude, riderLatLng.longitude,
+                                                     results
+                                                 )
+                                                 val distanceInMeters = results[0]
+                                                 if (distanceInMeters <= 50) {
+                                                     Toast.makeText(this@RequestDriverActivity, "Driver Arrived", Toast.LENGTH_LONG).show()
                                                  }
-                                         }
-                                     }
-                                     override fun onCancelled(error: DatabaseError) {
-                                         Log.e("TripStatusListener", "Listener cancelled: ${error.message}")
-                                     }
-                                 })
+                                             }
 
-                                 when (status) {
-                                     "accepted" -> {
-                                         // Hide finding driver and fill maps layouts
-                                         findingDriverBinding.root.visibility = View.GONE
-                                         binding.fillMaps.visibility = View.GONE
+                                             if (lat != 0.0 && lng != 0.0 && destinationLatLng != null && status == "rideStarted") {
+                                                 mMap.clear()
+                                                 drawRoute(driverLatLng, destinationLatLng)
+                                                 mMap.addMarker(MarkerOptions().position(driverLatLng).title("You"))
+                                                 mMap.addMarker(MarkerOptions().position(destinationLatLng).title("Destination"))
+                                             }
 
-                                         // Cancel animations and remove user circle
-                                         lastPulseAnimator?.cancel()
-                                         lastPulseAnimator = null
-                                         lastUserCircle?.remove()
-                                         lastUserCircle = null
-                                         animator?.cancel()
-                                         animator = null
-
-                                         // Get driverId from trip node (could be "driver" or "driverId")
-                                         val driverId = snapshot.child("driverId").getValue(String::class.java)
-                                             ?: snapshot.child("driver").getValue(String::class.java) ?: ""
-                                         Log.d("TripRequest", "Driver ID: $driverId")
-                                         if (driverId.isNotEmpty()) {
-                                             val driverUsersRef = FirebaseDatabase.getInstance().getReference("users")
-                                             driverUsersRef.child(driverId)
-                                                 .addListenerForSingleValueEvent(object : ValueEventListener {
-                                                     override fun onDataChange(driverSnapshot: DataSnapshot) {
-                                                         val driverName = driverSnapshot.child("name").getValue(String::class.java) ?: ""
-                                                         val carType = driverSnapshot.child("car").getValue(String::class.java) ?: ""
-                                                         val carNumber = driverSnapshot.child("carNumber").getValue(String::class.java) ?: ""
-                                                         val driverImgUrl = driverSnapshot.child("profileImageUrl").getValue(String::class.java)
-                                                         val driverPhone = driverSnapshot.child("phone").getValue(String::class.java) ?: ""
-                                                         Log.d(
-                                                             "TripRequest",
-                                                             "Driver info: name=$driverName, car=$carType, carNumber=$carNumber, imgUrl=$driverImgUrl"
-                                                         )
-
-                                                         binding.includeDriverInfo.imgCallDriver.setOnClickListener {
-                                                             if (driverPhone.isNotEmpty()) {
-                                                                 val intent = Intent(Intent.ACTION_DIAL)
-                                                                 intent.data = Uri.parse("tel:$driverPhone")
-                                                                 startActivity(intent)
+                                             val tripsRef = FirebaseDatabase.getInstance().getReference("Trips")
+                                             val historyRef = FirebaseDatabase.getInstance().getReference("History")
+                                             tripsRef.child(tripId!!).child("status").addValueEventListener(object : ValueEventListener {
+                                                 override fun onDataChange(snapshot: DataSnapshot) {
+                                                     val status = snapshot.getValue(String::class.java)
+                                                     Log.d("TripStatusListener", "Status changed: $status")
+                                                     if (status == "completed") {
+                                                         Log.d("TripStatusListener", "Trip completed, moving to history...")
+                                                         tripsRef.child(tripId!!).get().addOnSuccessListener { tripSnapshot ->
+                                                             Log.d("TripStatusListener", "Trip data fetched, data: ${tripSnapshot.value}")
+                                                             historyRef.child(tripId!!).setValue(tripSnapshot.value)
+                                                                 .addOnSuccessListener {
+                                                                     Log.d("TripStatusListener", "Trip moved to history successfully")
+                                                                     tripsRef.child(tripId!!).removeValue()
+                                                                         .addOnSuccessListener {
+                                                                             mMap.clear()
+                                                                             driverInfoBinding.root.visibility = View.GONE
+                                                                             tripSummaryBinding.root.visibility = View.VISIBLE
+                                                                             tripSummaryBinding.btnCompleteTrip.setOnClickListener {
+                                                                                 fragmentHomeBinding.root.visibility = View.VISIBLE
+                                                                             }
+                                                                         }
+                                                                 }
+                                                                 .addOnFailureListener { e ->
+                                                                     Log.e("TripStatusListener", "Failed to move trip to history: ${e.message}")
+                                                                 }
+                                                         }
+                                                             .addOnFailureListener { e ->
+                                                                 Log.e("TripStatusListener", "Failed to fetch trip data: ${e.message}")
                                                              }
-                                                         }
-
-                                                         // 1. Show toast
-                                                         if (!isDriverAcceptedToastShown) {
-                                                             Toast.makeText(
-                                                                 this@RequestDriverActivity,
-                                                                 "Your ride is accepted by $driverName",
-                                                                 Toast.LENGTH_LONG
-                                                             ).show()
-                                                             isDriverAcceptedToastShown = true
-                                                         }
-
-                                                         // 2. Show driver info layout (CardView)
-                                                         binding.includeDriverInfo.driverInfoLayout.visibility = View.VISIBLE
-
-                                                         // 3. Set driver info in the layout
-                                                         binding.includeDriverInfo.txtDriverName.text = driverName
-                                                         binding.includeDriverInfo.txtCarType.text = carType
-                                                         binding.includeDriverInfo.txtCarNumber.text = carNumber
-
-                                                         // 4. Load driver image (if using Glide)
-                                                         if (!driverImgUrl.isNullOrEmpty()) {
-                                                             Glide.with(this@RequestDriverActivity)
-                                                                 .load(driverImgUrl)
-                                                                 .placeholder(R.drawable.baseline_account_circle_24)
-                                                                 .error(R.drawable.baseline_account_circle_24)
-                                                                 .into(binding.includeDriverInfo.imgDriver)
-                                                         } else {
-                                                             binding.includeDriverInfo.imgDriver.setImageResource(R.drawable.baseline_account_circle_24)
-                                                         }
                                                      }
-                                                     override fun onCancelled(error: DatabaseError) {
-                                                         Log.e("TripRequest", "Failed to fetch driver info: ${error.message}")
+                                                 }
+                                                 override fun onCancelled(error: DatabaseError) {
+                                                     Log.e("TripStatusListener", "Listener cancelled: ${error.message}")
+                                                 }
+                                             })
+
+                                             when (status) {
+                                                 "accepted" -> {
+                                                     findingDriverBinding.root.visibility = View.GONE
+                                                     binding.fillMaps.visibility = View.GONE
+                                                     lastPulseAnimator?.cancel()
+                                                     lastPulseAnimator = null
+                                                     lastUserCircle?.remove()
+                                                     lastUserCircle = null
+                                                     animator?.cancel()
+                                                     animator = null
+                                                     val driverId = snapshot.child("driverId").getValue(String::class.java)
+                                                         ?: snapshot.child("driver").getValue(String::class.java) ?: ""
+                                                     Log.d("TripRequest", "Driver ID: $driverId")
+                                                     if (driverId.isNotEmpty()) {
+                                                         val driverUsersRef = FirebaseDatabase.getInstance().getReference("users")
+                                                         driverUsersRef.child(driverId)
+                                                             .addListenerForSingleValueEvent(object : ValueEventListener {
+                                                                 override fun onDataChange(driverSnapshot: DataSnapshot) {
+                                                                     val driverName = driverSnapshot.child("name").getValue(String::class.java) ?: ""
+                                                                     val carType = driverSnapshot.child("car").getValue(String::class.java) ?: ""
+                                                                     val carNumber = driverSnapshot.child("carNumber").getValue(String::class.java) ?: ""
+                                                                     val driverImgUrl = driverSnapshot.child("profileImageUrl").getValue(String::class.java)
+                                                                     val driverPhone = driverSnapshot.child("phone").getValue(String::class.java) ?: ""
+                                                                     Log.d(
+                                                                         "TripRequest",
+                                                                         "Driver info: name=$driverName, car=$carType, carNumber=$carNumber, imgUrl=$driverImgUrl"
+                                                                     )
+
+                                                                     binding.includeDriverInfo.imgCallDriver.setOnClickListener {
+                                                                         if (driverPhone.isNotEmpty()) {
+                                                                             val intent = Intent(Intent.ACTION_DIAL)
+                                                                             intent.data = Uri.parse("tel:$driverPhone")
+                                                                             startActivity(intent)
+                                                                         }
+                                                                     }
+                                                                     if (!isDriverAcceptedToastShown) {
+                                                                         Toast.makeText(
+                                                                             this@RequestDriverActivity,
+                                                                             "Your ride is accepted by $driverName",
+                                                                             Toast.LENGTH_LONG
+                                                                         ).show()
+                                                                         isDriverAcceptedToastShown = true
+                                                                     }
+
+                                                                     binding.includeDriverInfo.driverInfoLayout.visibility = View.VISIBLE
+                                                                     binding.includeDriverInfo.txtDriverName.text = driverName
+                                                                     binding.includeDriverInfo.txtCarType.text = carType
+                                                                     binding.includeDriverInfo.txtCarNumber.text = carNumber
+
+                                                                     if (!driverImgUrl.isNullOrEmpty()) {
+                                                                         Glide.with(this@RequestDriverActivity)
+                                                                             .load(driverImgUrl)
+                                                                             .placeholder(R.drawable.baseline_account_circle_24)
+                                                                             .error(R.drawable.baseline_account_circle_24)
+                                                                             .into(binding.includeDriverInfo.imgDriver)
+                                                                     } else {
+                                                                         binding.includeDriverInfo.imgDriver.setImageResource(R.drawable.baseline_account_circle_24)
+                                                                     }
+                                                                 }
+                                                                 override fun onCancelled(error: DatabaseError) {
+                                                                     Log.e("TripRequest", "Failed to fetch driver info: ${error.message}")
+                                                                 }
+                                                             })
                                                      }
-                                                 })
+                                                 }
+                                             }
                                          }
-                                     }
-//
+                                         override fun onCancelled(error: DatabaseError) {
+                                             Log.e("TripRequest", "Trip listener cancelled: ${error.message}")
+                                         }
+                                     })
+
+                                     val handler = android.os.Handler(mainLooper)
+                                     handler.postDelayed({
+                                         tripRef.get().addOnSuccessListener { snapshot ->
+                                             val status = snapshot.child("status").getValue(String::class.java)
+                                             Log.d("TripRequest", "Timeout check, trip status: $status")
+                                             if (status != "accepted" && status != "rideStarted" && status != "completed") {
+                                                 lastPulseAnimator?.cancel()
+                                                 lastPulseAnimator = null
+                                                 lastUserCircle?.remove()
+                                                 lastUserCircle = null
+                                                 animator?.cancel()
+                                                 animator = null
+                                                 Toast.makeText(this@RequestDriverActivity, "No nearby driver accepted your ride, try again please.", Toast.LENGTH_LONG).show()
+                                                 findingDriverBinding.root.visibility = View.GONE
+                                                 binding.fillMaps.visibility = View.GONE
+                                                 mMap.clear()
+                                                 fragmentHomeBinding.root.visibility = View.VISIBLE
+                                             }
+                                         }
+                                     }, 30000)
                                  }
-
-//                                 else {
-//                                     Log.d("TripRequest", "Status is not accepted: $status")
-//                                 }
-                             }
-                             override fun onCancelled(error: DatabaseError) {
-                                 Log.e("TripRequest", "Trip listener cancelled: ${error.message}")
-                             }
-                         })
-
-                         // Timeout handler: if no driver accepts in 30 seconds
-                         val handler = android.os.Handler(mainLooper)
-                         handler.postDelayed({
-                             tripRef.get().addOnSuccessListener { snapshot ->
-                                 val status = snapshot.child("status").getValue(String::class.java)
-                                 Log.d("TripRequest", "Timeout check, trip status: $status")
-                                 if (status != "accepted" && status != "rideStarted" && status != "completed") {
-                                     lastPulseAnimator?.cancel()
-                                     lastPulseAnimator = null
-
-                                     lastUserCircle?.remove()
-                                     lastUserCircle = null
-
-                                     animator?.cancel()
-                                     animator = null
-
-                                     Toast.makeText(this, "No nearby driver accepted your ride, try again please.", Toast.LENGTH_LONG).show()
-                                     // Optionally, hide the searching animation/layout
-                                     findingDriverBinding.root.visibility = View.GONE
-                                     binding.fillMaps.visibility = View.GONE
-                                     mMap.clear()
-                                     fragmentHomeBinding.root.visibility = View.VISIBLE
-
+                                 .addOnFailureListener { error ->
+                                     Log.e("TripRequest", "Failed to request trip: ${error.message}")
+                                     Toast.makeText(this@RequestDriverActivity, "Failed to request trip: ${error.message}", Toast.LENGTH_SHORT).show()
                                  }
-                             }
-                         }, 30000) // 30 seconds
-                     }
-                     .addOnFailureListener { error ->
-                         Log.e("TripRequest", "Failed to request trip: ${error.message}")
-                         Toast.makeText(this, "Failed to request trip: ${error.message}", Toast.LENGTH_SHORT).show()
-                     }
-
-
-                     .addOnFailureListener { error ->
-                         Toast.makeText(
-                             this,
-                             "Failed to request trip: ${error.message}",
-                             Toast.LENGTH_SHORT
-                         ).show()
-                     }
+                         }
+                         override fun onCancelled(error: DatabaseError) {
+                             Toast.makeText(this@RequestDriverActivity, "Failed to fetch user: ${error.message}", Toast.LENGTH_LONG).show()
+                         }
+                     })
              }
-
          }
      }
 
@@ -866,11 +824,15 @@ import java.util.Locale
                      val distanceValue = distanceText.replace(" km", "").toDouble()
                      val price = distanceValue * 10        // ₹10 per km
 
+                     val tripData = mutableMapOf<String, Any>()
+
 
                      val start_address = legsObject.getString("start_address")
                      val end_address = legsObject.getString("end_address")
 
                      // Set value for Distance and Fare price
+                     Log.d("FIREBASE_UPDATE", "Trip node!")
+
                      confirmUberBinding.txtDistance.setText(distanceText)
                      confirmUberBinding.txtFare.setText("₹${"%.2f".format(price)}")
                      tripSummaryBinding.txtStartAddress.setText(start_address)
@@ -878,6 +840,31 @@ import java.util.Locale
                      tripSummaryBinding.txtTripDuration.text = "Duration: $duration"
                      tripSummaryBinding.txtTripDistance.text = "Distance: $distanceText"
                      tripSummaryBinding.txtTripCharges.text = "Charges: ₹${"%.2f".format(price)}"
+                     Log.d("FIREBASE_UPDATE", "tripId at update: $tripId")
+
+
+                     tripId?.let { id ->
+                         Log.d("FIREBASE_UPDATE", "About to update trip node with id: $id")
+                         val tripUpdates = mapOf(
+                             "start_address" to start_address,
+                             "end_address" to end_address,
+                             "distanceText" to distanceText,
+                             "duration" to duration,
+                             "price" to price
+                         )
+                         FirebaseDatabase.getInstance()
+                             .getReference("Trips")
+                             .child(id)
+                             .updateChildren(tripUpdates) { error, _ ->
+                                 if (error == null) {
+                                     Log.d("FIREBASE_UPDATE", "Trip node updated successfully!")
+                                 } else {
+                                     Log.e("FIREBASE_UPDATE", "Failed to update trip: ${error.message}")
+                                 }
+                             }
+                     }
+
+
 
                      addOriginMarker(duration, start_address)
 
