@@ -12,6 +12,7 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import com.example.uberriderremake.Common
 import com.example.uberriderremake.HomeActivity
+import com.example.uberriderremake.IntroScreens.FirstIntro
 import com.example.uberriderremake.R
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.database.*
@@ -83,7 +84,7 @@ class SplashScreen : AppCompatActivity() {
                 })
         } else {
             Handler(Looper.getMainLooper()).postDelayed({
-                startActivity(Intent(this, PhoneActivity::class.java))
+                startActivity(Intent(this, FirstIntro::class.java))
                 finish()
             }, 2000)
         }

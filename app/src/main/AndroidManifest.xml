@@ -20,6 +20,15 @@
         android:usesCleartextTraffic="true"
         tools:targetApi="31">
         <activity
+            android:name=".IntroScreens.ThirdIntro"
+            android:exported="false" />
+        <activity
+            android:name=".IntroScreens.SecondIntro"
+            android:exported="false" />
+        <activity
+            android:name=".IntroScreens.FirstIntro"
+            android:exported="false" />
+        <activity
             android:name=".HistoryActivity"
             android:exported="false" />
         <!--

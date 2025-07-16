@@ -305,6 +305,7 @@ import java.util.Locale
                                              Log.d("TripRequest", "Rider location updated: $riderLatLng")
 
                                              if (lat != 0.0 && lng != 0.0 && riderLatLng != null && status == "accepted") {
+                                                 mMap.clear()
                                                  updateDriverOnMap(driverLatLng, riderLatLng)
                                                  drawRoute(driverLatLng, riderLatLng)
                                                  val results = FloatArray(1)
