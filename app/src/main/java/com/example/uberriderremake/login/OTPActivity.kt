@@ -106,6 +106,8 @@ class OTPActivity : AppCompatActivity() {
                 inputOTP4.setText("")
                 inputOTP5.setText("")
                 inputOTP6.setText("")
+
+                inputOTP1.requestFocus()
                 resendTV.visibility = View.INVISIBLE
                 resendTV.isEnabled = false
 

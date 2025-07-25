@@ -126,9 +126,9 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="18dp"
-            android:background="@color/colorAccent"
+            android:background="@color/yellow"
             android:text="@string/okay"
-            android:textColor="@android:color/white" />
+            android:textColor="@color/black" />
 
     </LinearLayout>
 </androidx.cardview.widget.CardView>

@@ -3,89 +3,104 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:id="@+id/main"
+    android:background="@color/white"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     tools:context=".login.PhoneActivity">
-
-    <EditText
-        android:id="@+id/phoneEditTextNumber"
-        android:layout_width="0dp"
-        android:layout_height="45dp"
-        android:layout_marginStart="10dp"
-        android:layout_marginEnd="32dp"
-        android:layout_marginBottom="24dp"
-        android:background="@drawable/edit_text_bg"
-        android:ems="10"
-        android:hint="Type your number"
-        android:inputType="phone"
-        android:paddingStart="16dp"
-        android:textColor="@color/black"
-        android:textColorHint="#606060"
-        app:layout_constraintBottom_toTopOf="@+id/sendOTPBtn"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toEndOf="@+id/editTextNumber2" />
-
-    <Button
-        android:id="@+id/sendOTPBtn"
-        android:layout_width="wrap_content"
-        android:layout_height="55dp"
-        android:layout_marginBottom="40dp"
-        android:backgroundTint="@color/btn_color"
-        android:text="Send otp"
-        android:textColor="@color/white"
-        android:textStyle="bold"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintHorizontal_bias="0.5"
-        app:layout_constraintStart_toStartOf="parent" />
-
-    <EditText
-        android:id="@+id/editTextNumber2"
-        android:layout_width="50dp"
-        android:layout_height="45dp"
-        android:layout_marginStart="32dp"
-        android:background="@drawable/edit_text_bg"
-        android:ems="10"
-        android:enabled="false"
-        android:inputType="number"
-        android:text="  +91"
-        android:textColor="@color/black"
-        app:layout_constraintBottom_toBottomOf="@+id/phoneEditTextNumber"
-        app:layout_constraintStart_toStartOf="parent" />
 
     <TextView
         android:id="@+id/textView2"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_marginBottom="32dp"
-        android:text="Login with \nMobile number"
+        android:layout_marginTop="48dp"
+        android:fontFamily="@font/abyssinica_sil"
+        android:text="Enter your Phone number"
         android:textColor="@color/black"
-        android:textSize="16sp"
+        android:textSize="26sp"
         android:textStyle="bold"
-        app:layout_constraintBottom_toTopOf="@+id/editTextNumber2"
-        app:layout_constraintStart_toStartOf="@+id/editTextNumber2" />
-
-    <ImageView
-        android:id="@+id/imageView"
-        android:layout_width="0dp"
-        android:layout_height="380dp"
         app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintHorizontal_bias="0.5"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent"
-        app:srcCompat="@drawable/phone_auth" />
+        app:layout_constraintTop_toTopOf="parent" />
+
+    <TextView
+        android:id="@+id/textView4"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="32dp"
+        android:text="We'll send you a text message to verify your phone."
+        android:textColor="@color/black"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@+id/textView2" />
+
+
+    <EditText
+        android:id="@+id/phoneEditTextNumber"
+        android:layout_width="0dp"
+        android:layout_height="45dp"
+        android:layout_marginTop="48dp"
+        android:background="@drawable/edittextshape"
+        android:backgroundTint="@color/gray"
+        android:elevation="6dp"
+        android:ems="10"
+        android:hint="Type your number"
+        android:inputType="phone"
+        android:paddingStart="16dp"
+        android:shadowDy="5"
+        android:textColor="@color/black"
+        android:textColorHint="#606060"
+        app:layout_constraintEnd_toEndOf="@+id/textView4"
+        app:layout_constraintHorizontal_bias="0.0"
+        app:layout_constraintStart_toStartOf="@+id/textView4"
+        app:layout_constraintTop_toBottomOf="@+id/textView4" />
+
+
+    <androidx.appcompat.widget.AppCompatButton
+        android:id="@+id/sendOTPBtn"
+        android:layout_width="255dp"
+        android:layout_height="46dp"
+        android:layout_marginLeft="32dp"
+        android:layout_marginTop="136dp"
+        android:layout_marginRight="32dp"
+        android:background="@drawable/buttonshape"
+        android:backgroundTint="@color/yellow"
+        android:fontFamily="sans-serif-medium"
+        android:text="Send OTP"
+        android:textAllCaps="false"
+        android:textColor="@color/black"
+        android:textSize="18sp"
+        app:layout_constraintEnd_toEndOf="@+id/phoneEditTextNumber"
+        app:layout_constraintHorizontal_bias="0.333"
+        app:layout_constraintStart_toStartOf="@+id/phoneEditTextNumber"
+        app:layout_constraintTop_toBottomOf="@+id/phoneEditTextNumber" />
+
 
     <ProgressBar
         android:id="@+id/phoneProgressBar"
         style="?android:attr/progressBarStyle"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
+        android:layout_marginTop="48dp"
         android:indeterminateTint="@color/btn_color"
-        app:layout_constraintBottom_toTopOf="@+id/textView2"
         app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintHorizontal_bias="0.5"
+        app:layout_constraintHorizontal_bias="0.498"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@+id/imageView" />
+        app:layout_constraintTop_toBottomOf="@+id/phoneEditTextNumber" />
+
+    <TextView
+        android:id="@+id/textView5"
+        android:layout_width="355dp"
+        android:layout_height="70dp"
+        android:layout_marginLeft="32dp"
+        android:layout_marginRight="32dp"
+        android:layout_marginBottom="16dp"
+        android:gravity="center"
+        android:text="By proceeding, you consent to get calls, SMS messages, or emails,from us and our affiliates to the number provided."
+        android:textColor="@color/black"
+        android:textSize="14sp"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent" />
 
 
 
