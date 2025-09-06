@@ -2,7 +2,7 @@
 
 RidOn Rider App is a sleek and intuitive ride-hailing app designed for passengers to book rides, track drivers in real time, and enjoy a seamless transportation experience. Inspired by popular ride-hailing services, RidOn provides a modern UI and reliable backend integration.
 
-RidOn Driver Github Repo Link: https://github.com/badalm06/RidOn_Driver.git
+RidOn Driver Github Repo Link: https://github.com/badalm06/RidOn_Driver
 
 ![Made with Kotlin](https://img.shields.io/badge/Made%20with-Kotlin-7F52FF.svg?style=for-the-badge&logo=kotlin)
 ![Jetpack Compose](https://img.shields.io/badge/Jetpack-Compose-blue?style=for-the-badge&logo=android)
@@ -95,7 +95,7 @@ Min SDK 24
 1. **Clone the repository**
 
     ```bash
-    git clone https://github.com/badalm06/ridon-rider-app.git
+    git clone https://github.com/badalm06/RidOn_Rider.git
     ```
 2. Set up Firebase (Auth, Realtime DB, Storage)
 
