@@ -14,6 +14,7 @@ import androidx.appcompat.app.AppCompatActivity
 import com.bumptech.glide.Glide
 import com.example.uberriderremake.Common
 import com.example.uberriderremake.HomeActivity
+import com.example.uberriderremake.Model.DriverGeoModel
 import com.example.uberriderremake.R
 import com.example.uberriderremake.databinding.ActivityEditProfileBinding
 import com.google.firebase.FirebaseException
@@ -140,6 +141,7 @@ class EditProfileActivity : AppCompatActivity() {
                 finish()
             }
         }
+
 
     private fun saveUserProfileAndNavigate() {
         saveUserProfile {
