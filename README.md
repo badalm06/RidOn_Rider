@@ -8,6 +8,7 @@ RidOn Driver Github Repo Link: https://github.com/badalm06/RidOn_Driver
 ![Jetpack Compose](https://img.shields.io/badge/Jetpack-Compose-blue?style=for-the-badge&logo=android)
 ![Firebase](https://img.shields.io/badge/Backend-Firebase-orange?style=for-the-badge&logo=firebase)
 ![Google Maps](https://img.shields.io/badge/Maps-Google%20Maps-lightgrey?style=for-the-badge&logo=googlemaps)
+![Platform](https://img.shields.io/badge/Platform-Android-green?style=for-the-badge&logo=android)
 ![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)
 
 
