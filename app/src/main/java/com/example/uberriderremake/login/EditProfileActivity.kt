@@ -81,10 +81,8 @@ class EditProfileActivity : AppCompatActivity() {
                 }
 
                 if (isValid) {
-                    // Save profile before navigating
                     saveUserProfileAndNavigateToHome()
                 }
-                // If not valid, errors will be shown and navigation will not happen
             }
 
 
@@ -112,10 +110,8 @@ class EditProfileActivity : AppCompatActivity() {
                 }
 
                 if (isValid) {
-                    // Save profile before navigating
                     saveUserProfileAndNavigate()
                 }
-                // If not valid, errors will be shown and navigation will not happen
             }
 
 
@@ -145,7 +141,6 @@ class EditProfileActivity : AppCompatActivity() {
 
     private fun saveUserProfileAndNavigate() {
         saveUserProfile {
-            // This block runs only after a successful save
             startActivity(Intent(this, HomeActivity::class.java))
             finish()
         }
@@ -153,7 +148,6 @@ class EditProfileActivity : AppCompatActivity() {
 
     private fun saveUserProfileAndNavigateToHome() {
         saveUserProfile {
-            // This block runs only after a successful save
             startActivity(Intent(this, HomeActivity::class.java))
             finish()
         }
@@ -228,9 +222,7 @@ class EditProfileActivity : AppCompatActivity() {
         setEditable(isEditing)
         binding.editBtn.text = if (isEditing) "Save" else "Edit"
         if (!isEditing) {
-            // Only save, do not navigate here
             saveUserProfile {
-                // Optional: You can show a toast or update UI after save if needed
                 Toast.makeText(this, "Profile updated", Toast.LENGTH_SHORT).show()
             }
         }
@@ -367,8 +359,7 @@ class EditProfileActivity : AppCompatActivity() {
         database.child(userRider.uid).updateChildren(userData)
             .addOnSuccessListener {
                 Toast.makeText(this, "Profile updated", Toast.LENGTH_SHORT).show()
-                // Update your local user object if needed
-                onSuccess() // Call the callback only after successful save
+                onSuccess()
             }
             .addOnFailureListener {
                 Toast.makeText(this, "Failed to update profile", Toast.LENGTH_SHORT).show()
