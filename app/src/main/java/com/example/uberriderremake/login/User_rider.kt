@@ -34,7 +34,6 @@ data class User_rider(
     var profileImageUrl: String? = null
 ) {
     companion object {
-        // Move these inside the companion object
         private val retrofit = Retrofit.Builder()
             .baseUrl("https://uber-backend-462313.el.r.appspot.com/")
             .addConverterFactory(GsonConverterFactory.create())
@@ -61,7 +60,6 @@ data class User_rider(
             selectedPlaceEvent: SelectedPlaceEvent,
             tripId: String
         ) {
-            // Get Token
             FirebaseDatabase.getInstance()
                 .getReference(Common.TOKEN_REFERENCE)
                 .child(foundDriver!!.key!!)
@@ -74,7 +72,7 @@ data class User_rider(
                                 "trip_id" to tripId,
                                 "pickup_location" to "${selectedPlaceEvent.origin.latitude},${selectedPlaceEvent.origin.longitude}",
                                 "destination_location" to "${selectedPlaceEvent.destination.latitude},${selectedPlaceEvent.destination.longitude}",
-                                "rider_key" to FirebaseAuth.getInstance().currentUser!!.uid // <-- Add this line
+                                "rider_key" to FirebaseAuth.getInstance().currentUser!!.uid
 
                             )
 
@@ -90,7 +88,6 @@ data class User_rider(
                             )
 
 
-                            // Call your backend to send the notification
                             backendService.sendNotification(request).enqueue(object : retrofit2.Callback<NotificationResponse> {
                                 override fun onResponse(
                                     call: retrofit2.Call<NotificationResponse>,

@@ -31,7 +31,6 @@ class SplashScreen : AppCompatActivity() {
 
         val user = FirebaseAuth.getInstance().currentUser
         if (user != null) {
-            // ✅ User is logged in, load user profile
             FirebaseDatabase.getInstance().getReference("users")
                 .child(user.uid)
                 .addListenerForSingleValueEvent(object : ValueEventListener {
@@ -42,7 +41,6 @@ class SplashScreen : AppCompatActivity() {
                         val profileImageUrl =
                             snapshot.child("profileImageUrl").getValue(String::class.java) ?: ""
 
-                        // ✅ Set data to Common.currentUser
                         Common.currentUserRider = User_rider().apply {
                             this.name = name
                             this.number = phone
@@ -50,7 +48,6 @@ class SplashScreen : AppCompatActivity() {
                             this.profileImageUrl = profileImageUrl
                         }
 
-                        // ✅ Get Firebase Messaging Token
                         FirebaseMessaging.getInstance().token
                             .addOnCompleteListener { task ->
                                 if (!task.isSuccessful) {
@@ -66,7 +63,6 @@ class SplashScreen : AppCompatActivity() {
                                 Log.d("TOKEN", token)
                                 User_rider.updateToken(this@SplashScreen, token)
 
-                                // ✅ Go to home screen
                                 startActivity(Intent(this@SplashScreen, HomeActivity::class.java))
                                 finish()
                             }
